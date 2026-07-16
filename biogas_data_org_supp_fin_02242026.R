@@ -8,44 +8,6 @@ library(cowplot)
 
 datasup <- read_csv("/Users/colleenahern/Documents/Magda_BPs_experiment/biogas_data/BP_expI_gas_organized_forR_supp_02232026.csv")
 
-# T-tests to determine statistical significance of all comparisons - 04/07/2026
-# G1-PHA pairing
-datasup_sub <- datasup[14,grepl("PHA \\+ AS|PHA \\+ G1 \\+ AS|tPHA \\+ G1 \\+ AS", colnames(datasup))]
-datasup_sub <- cbind(datasup[14, c(37:39,2:4)], datasup_sub) # G1 + AS and AS
-datasup_sub <- datasup[14,grepl("CA \\+ AS|CA \\+ S3 \\+ AS|tCA \\+ S3 \\+ AS", colnames(datasup))]
-datasup_sub <- cbind(datasup[14, c(32:34,2:4)], datasup_sub) # S3 + AS and AS
-datasup_sub <- datasup[14,grepl("PLA \\+ AS|PLA \\+ S3 \\+ AS|tPLA \\+ S3 \\+ AS", colnames(datasup))]
-datasup_sub <- cbind(datasup[14, c(32:34,2:4)], datasup_sub) # S3 + AS and AS
-datasup_sub <- t(datasup_sub)
-
-# keep <- c("PHA + G1 + AS 1", "PHA + G1 + AS 2", "PHA + G1 + AS 3", "G1 + AS 1", "G1 + AS 2", "G1 + AS 3")
-# keep <- c("PHA + G1 + AS 1", "PHA + G1 + AS 2", "PHA + G1 + AS 3", "AS 1", "AS 2", "AS 3")
-# keep <- c("PHA + G1 + AS 1", "PHA + G1 + AS 2", "PHA + G1 + AS 3", "PHA + AS 1", "PHA + AS 2")
-# keep <- c("CA + S3 + AS 1", "CA + S3 + AS 2", "CA + S3 + AS 3", "S3 + AS 1", "S3 + AS 2", "S3 + AS 3")
-# keep <- c("CA + S3 + AS 1", "CA + S3 + AS 2", "CA + S3 + AS 3", "AS 1", "AS 2", "AS 3")
-# keep <- c("CA + S3 + AS 1", "CA + S3 + AS 2", "CA + S3 + AS 3", "CA + AS 1", "CA + AS 2")
-# keep <- c("PLA + S3 + AS 1", "PLA + S3 + AS 2", "PLA + S3 + AS 3", "S3 + AS 1", "S3 + AS 2", "S3 + AS 3")
-# keep <- c("PLA + S3 + AS 1", "PLA + S3 + AS 2", "PLA + S3 + AS 3", "AS 1", "AS 2", "AS 3")
-keep <- c("PLA + S3 + AS 1", "PLA + S3 + AS 2", "PLA + S3 + AS 3", "PLA + AS 1", "PLA + AS 2", "PLA + AS 3")
-
-datasup_subsub <- as.data.frame(datasup_sub[rownames(datasup_sub) %in% keep,])
-datasup_subsub$group <- c(rep("A",3), rep("B",3))
-# datasup_subsub$group <- c(rep("A",2), rep("B",3))
-colnames(datasup_subsub) <- c("value", "group")
-
-t.test(value ~ group, data = datasup_subsub)
-
-# T-test results:
-# PHA + G1 + AS not statistically significantly more than G1 + AS
-# PHA + G1 + AS is statistically significantly more than AS
-# PHA + G1 + AS not statistically significantly more than PHA + AS
-# CA + S3 + AS not statistically significantly more than S3 + AS
-# CA + S3 + AS is statistically significantly more than AS
-# CA + S3 + AS is statistically significantly more than CA + AS
-# PLA + S3 + AS not statistically significantly more than S3 + AS
-# PLA + S3 + AS is statistically significantly more than AS
-# PLA + S3 + AS is statistically significantly more than PLA + AS
-
 # Make growth curves
 palette.colors(palette = "Okabe-Ito")
 
