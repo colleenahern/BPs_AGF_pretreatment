@@ -133,7 +133,6 @@ bpcoldata3$group <- gsub(" + ", "_", bpcoldata3$group, fixed = TRUE)
 bpcoldata3$name  <- rownames(bpcoldata3)
 
 # ── Taxa contribution to CAZymes, per condition ───────────────────────────────
-
 conditions <- c("CA_S3_AS", "CA_AS", "PHA_G1_AS", "PHA_AS")
 
 # Pre-build the long CAZyme x taxa x sample table once (all samples, all conditions)
@@ -287,6 +286,7 @@ make_volcano <- function(df, lfc_col, q_col, title, n_up = 10, n_down = 10) {
 }
 
 # ── Plot ──────────────────────────────────────────────────────────────────────
+# Combine CAZ_sub volcano plots and combine that with Chord plots in Powerpoint for final figure
 df <- read_tsv(out_tsv) |> as.data.frame()
 
 np1 <- make_volcano(df, "lfc_CA",  "q_CA",  "CA + S3 + AS vs. CA + AS")
