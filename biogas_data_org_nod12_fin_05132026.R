@@ -1,10 +1,6 @@
 # =============================================================================
 # Biogas Data — Line Plots and Bar Plots with Significance
 # Colleen Ahern | Last updated: 05/13/2026
-#
-# Notes:
-#   - Day 12 removed from CA and PLA samples due to bad S3 + CA data
-#   - PHA uses G1 not S3 so Day 12 is kept for PHA
 # =============================================================================
 
 # ── Libraries ─────────────────────────────────────────────────────────────────
