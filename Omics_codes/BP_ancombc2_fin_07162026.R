@@ -139,7 +139,7 @@ ps_bac <- qza_to_phyloseq(
   features = file.path(BASE, "output_bac/qiime2/input/table.qza"),
   taxonomy = file.path(BASE, "output_bac/qiime2/input/taxonomy.qza"),
   metadata = file.path(BASE, "metadata/metadata_b_12122024.txt")
-) # Unrarefied counts - use for final analysis
+) # Unrarefied counts - use for final analysis (~/Documents/Github_repos/BPs_AGF_pretreatment/Omics_supplmentary_files/16S/qiime2/bacteria in Git repo)
 
 ps_bac <- subset_samples(ps_bac, Experiment == "BP_Film") 
 
@@ -150,7 +150,7 @@ ps_arc <- qza_to_phyloseq(
   features = file.path(BASE, "output_arc/qiime2/input/table.qza"),
   taxonomy = file.path(BASE, "output_arc/qiime2/input/taxonomy.qza"),
   metadata = file.path(BASE, "metadata/metadata_a_12122024.txt")
-) # Unrarefied counts - use for final analysis
+) # Unrarefied counts - use for final analysis (BPs_AGF_pretreatment/Omics_supplmentary_files/16S/qiime2/archaea in Git repo)
 
 ps_arc <- subset_samples(ps_arc, Experiment == "BP_Film") 
 
