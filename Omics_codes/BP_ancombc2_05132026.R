@@ -140,7 +140,8 @@ ps_bac <- qza_to_phyloseq(
   tree     = file.path(BASE, "caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza"),
   taxonomy = file.path(BASE, "output_bac2/qiime2/input/taxonomy.qza"),
   metadata = file.path(BASE, "metadata/metadata_b_12122024.txt")
-)
+) # Rarefied counts - used initially but don't use for final analysis
+
 ps_bac_df <- psmelt(ps_bac)
 ps_bac_df <- ps_bac_df[ps_bac_df$Experiment == "BP_Film",]
 write_tsv(ps_bac_df,
@@ -151,7 +152,7 @@ ps_arc <- qza_to_phyloseq(
   tree     = file.path(BASE, "caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza"),
   taxonomy = file.path(BASE, "output_arc2/qiime2/input/taxonomy.qza"),
   metadata = file.path(BASE, "metadata/metadata_a_12122024.txt")
-)
+) # Rarefied counts - used initially but don't use for final analysis
 
 ps_arc_df <- psmelt(ps_arc)
 ps_arc_df <- ps_arc_df[ps_arc_df$Experiment == "BP_Film",]
@@ -311,7 +312,7 @@ ancombcph <- pheatmap(
   cluster_rows         = TRUE,
   fontsize             = 12,
   display_numbers      = FALSE,
-  annotation_row       = annotation_row,
+  # annotation_row       = annotation_row,
   annotation_colors    = ann_colors,
   annotation_names_row = FALSE,
   border_color         = "grey",
@@ -353,6 +354,8 @@ ps_bac_film <- load_film_ps(
   taxonomy = "output_bac2/qiime2/input/taxonomy.qza",
   metadata = "metadata/metadata_b_12122024.txt"
 )
+
+
 
 set.seed(123)
 deg_plot_bac <- run_nmds(ps_bac_film, title = "Bray NMDS: Bacteria")
