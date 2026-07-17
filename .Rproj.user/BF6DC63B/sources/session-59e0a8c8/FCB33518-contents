@@ -1,0 +1,147 @@
+# 01/21/2026
+# Colleen Ahern
+# Final figure version: Using qiime2 output from Magda_BPs_experiment to create NMDS plot
+
+library(qiime2R)
+library(phyloseq)
+library(vegan)
+library(ggforce)
+library(ggpubr)
+
+# For ARCHAEA data
+
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/arc2analysis/16S-table-nocmb-rarefied-3000_filtered.qza",
+                        tree="caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_arc2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_a_12122024.txt")
+
+sample_variables(pswd)
+names(pswd@sam_data) <- c("Target", "Experiment", "Test", "TestCond", "AF", "Timepoint", "Time",  "Replicate", "Group", "Condition")
+pswd@sam_data
+
+# For film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") 
+pswd_film@sam_data
+pswd_film@sam_data$Condition <- gsub(" film", "", pswd_film@sam_data$Condition)
+pswd_film@sam_data$Condition
+pswd_film@sam_data
+
+pswd.prop <- transform_sample_counts(pswd_film, function(otu) otu/sum(otu))
+
+ord.nmds.bray_wd <- ordinate(pswd.prop, method="NMDS", distance="bray")
+
+deg_plot <- plot_ordination(pswd.prop, ord.nmds.bray_wd, color = "Condition", shape = "Time", title="Bray NMDS: Archaea") + 
+  geom_point(size = 3) + 
+  theme_classic() + 
+  theme(text = element_text(size = 12), plot.title = element_text(size = 14, hjust = 0.5, face = "bold"), axis.title = element_text(size = 12), 
+        legend.title = element_text(size = 12, face = "bold", vjust = -2), legend.text = element_text(size = 12), axis.text = element_text(size = 12))
+
+deg_plot 
+
+# Permanova to test statistical significance of achaea samples
+# Archaea: CA + S3 + AS vs CA + AS/PHA + AS
+psarc_sub_1 <- subset_samples(pswd_film, Condition %in% c("CA + S3 + AS", "CA + AS", "PHA + AS"))
+psarc_sub_1@sam_data$Subcond <- ifelse(psarc_sub_1@sam_data$Condition == "CA + S3 + AS", "A", "B")
+otu_mat_1 <- as(otu_table(psarc_sub_1), "matrix")
+if (taxa_are_rows(psarc_sub_1)) otu_mat_1 <- t(otu_mat_1)
+meta_1 <- data.frame(sample_data(psarc_sub_1))
+dist_mat_1 <- vegdist(otu_mat_1, method = "bray")
+
+set.seed(123)
+adonis2(dist_mat_1 ~ Subcond, data = meta_1)
+
+# Archaea: PHA + G1 + AS vs CA + AS/PHA + AS
+psarc_sub_2 <- subset_samples(pswd_film, Condition %in% c("PHA + G1 + AS", "CA + AS", "PHA + AS"))
+psarc_sub_2@sam_data$Subcond <- ifelse(psarc_sub_2@sam_data$Condition == "PHA + G1 + AS", "A", "B")
+table(psarc_sub_2@sam_data$Condition, psarc_sub_2@sam_data$Subcond)  # sanity check before running adonis2
+otu_mat_2 <- as(otu_table(psarc_sub_2), "matrix")
+if (taxa_are_rows(psarc_sub_2)) otu_mat_2 <- t(otu_mat_2)
+meta_2 <- data.frame(sample_data(psarc_sub_2))
+dist_mat_2 <- vegdist(otu_mat_2, method = "bray")
+
+set.seed(123)
+adonis2(dist_mat_2 ~ Subcond, data = meta_2)
+
+
+# Permanova results:
+# Archaea CA + S3 + AS vs CA + AS/PHA + AS Pr(>F) = 0.012; R2 = 0.28431; F = 3.5752
+# Archaea PHA + G1 + AS vs CA + AS/PHA + AS Pr(>F) = 0.011; R2 = 0.47321; F = 7.1863
+
+
+########################################################################################################################
+# For BACTERIA data
+
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza",
+                        tree="caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_bac2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_b_12122024.txt")
+
+sample_variables(pswd)
+names(pswd@sam_data) <- c("Target", "Experiment", "Test", "TestCond", "AF", "Timepoint", "Time",  "Replicate", "Group", "Condition")
+sample_variables(pswd)
+
+# For film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") 
+pswd_film@sam_data$Condition <- gsub(" film", "", pswd_film@sam_data$Condition)
+pswd_film@sam_data$Condition
+print(pswd_film)
+
+pswd.prop <- transform_sample_counts(pswd_film, function(otu) otu/sum(otu))
+
+ord.nmds.bray_wd <- ordinate(pswd.prop, method="NMDS", distance="bray")
+
+
+
+deg_plot2 <- plot_ordination(pswd.prop, ord.nmds.bray_wd, color = "Condition", shape = "Time", title="Bray NMDS: Bacteria") + 
+  geom_point(size = 3) + 
+  theme_classic() + 
+  theme(text = element_text(size = 12), plot.title = element_text(size = 14, hjust = 0.5, face = "bold"), axis.title = element_text(size = 12), 
+        legend.title = element_text(size = 12, face = "bold", vjust = -2), legend.text = element_text(size = 12), axis.text = element_text(size = 12))
+
+deg_plot2
+
+
+# Combine deg_plot and deg_plot2
+deg_plot3 <- ggarrange(deg_plot, deg_plot2, ncol=2, nrow=1, common.legend = TRUE, legend="right", labels = c("A)", "B)"))
+deg_plot3
+
+library(cowplot)
+nmdsancplot <- plot_grid(deg_plot3, ancombcphgg, nrow = 2, ncol = 1, labels = c("", "C)"))
+nmdsancplot
+
+ggsave(plot = nmdsancplot, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/16S_figure_02232026.pdf", width = 10, height = 8, units = "in", dpi = 300)
+ggsave(plot = nmdsancplot, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/16S_figure_02232026.tiff", width = 10, height = 8, units = "in", dpi = 200, bg = "white")
+
+
+# Permanova to check statistical significance of bacteria samples
+# Bacteria: CA + S3 + AS vs CA + AS
+psbac_sub_1 <- subset_samples(pswd_film, Condition %in% c("CA + S3 + AS", "CA + AS"))
+psbac_sub_1@sam_data$Subcond <- ifelse(psbac_sub_1@sam_data$Condition == "CA + S3 + AS", "A", "B")
+table(psbac_sub_1@sam_data$Condition, psbac_sub_1@sam_data$Subcond)
+otu_mat_1 <- as(otu_table(psbac_sub_1), "matrix")
+if (taxa_are_rows(psbac_sub_1)) otu_mat_1 <- t(otu_mat_1)
+meta_1 <- data.frame(sample_data(psbac_sub_1))
+dist_mat_1 <- vegdist(otu_mat_1, method = "bray")
+
+set.seed(123)
+adonis2(dist_mat_1 ~ Subcond, data = meta_1)
+
+# Bacteria: PHA + G1 + AS vs PHA + AS
+psbac_sub_2 <- subset_samples(pswd_film, Condition %in% c("PHA + G1 + AS", "PHA + AS"))
+psbac_sub_2@sam_data$Subcond <- ifelse(psbac_sub_2@sam_data$Condition == "PHA + G1 + AS", "A", "B")
+table(psbac_sub_2@sam_data$Condition, psbac_sub_2@sam_data$Subcond)
+otu_mat_2 <- as(otu_table(psbac_sub_2), "matrix")
+if (taxa_are_rows(psbac_sub_2)) otu_mat_2 <- t(otu_mat_2)
+meta_2 <- data.frame(sample_data(psbac_sub_2))
+dist_mat_2 <- vegdist(otu_mat_2, method = "bray")
+
+set.seed(123)
+adonis2(dist_mat_2 ~ Subcond, data = meta_2)
+
+## Results:
+# Bacteria CA + S3 + AS vs CA + AS Pr(>F) = 0.001; R2 = 0.27185; F = 4.4802
+# Bacteria PHA + G1 + AS vs PHA + AS Pr(>F) = 0.004; R2 = 0.26322; F = 3.5725

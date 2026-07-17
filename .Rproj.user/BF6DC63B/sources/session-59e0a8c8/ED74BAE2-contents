@@ -1,0 +1,1247 @@
+# 12/03/2025
+# Colleen Ahern
+# Using ANCOM-BC2 on 16S data for differential abundance testing 
+
+library(ANCOMBC)
+library(tidyverse)
+library(DT)
+library(dplyr)
+library(ggplot2)
+library(phyloseq)
+library(qiime2R)
+
+################################################################################################################
+# For Bacteria data
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza",
+                        tree="caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_bac2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_b_12122024.txt")
+
+sample_variables(pswd)
+metadata_b <- read.delim("metadata/metadata_b_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_film)
+
+# Run ancombc2 function using the phyloseq object
+
+set.seed(123)
+out = ancombc2(data = pswd_film, tax_level = "Genus",
+               fix_formula = "Testcond",
+               rand_formula = NULL,
+               p_adj_method = "holm", pseudo_sens = TRUE,
+               prv_cut = 0.10, lib_cut = 1000, s0_perc = 0.05,
+               group = "Testcond", struc_zero = TRUE, neg_lb = TRUE,
+               alpha = 0.05, n_cl = 1, verbose = TRUE,
+               global = TRUE, pairwise = TRUE, dunnet = TRUE, trend = FALSE,
+               iter_control = list(tol = 1e-2, max_iter = 1, verbose = TRUE),
+               em_control = list(tol = 1e-5, max_iter = 1),
+               lme_control = lme4::lmerControl(),
+               mdfdr_control = list(fwer_ctrl_method = "holm", B = 1),
+               trend_control = list(contrast =
+                                      list(matrix(c(1, 0, -1, 1),
+                                                  nrow = 2,
+                                                  byrow = TRUE)),
+                                    node = list(2),
+                                    solver = "ECOS",
+                                    B = 1))
+
+
+
+res_prim = output$res
+res_pair = out$res_pair
+
+
+res_pairfilt <- res_pair[,c(1,2,7,8,13,14,19,20,25,26,31,32,37,38,43,44,49)]
+
+names(res_pairfilt) <- gsub("Testcond", "", names(res_pairfilt))
+names(res_pairfilt) <- gsub("_", " ", names(res_pairfilt))
+names(res_pairfilt) <- gsub(" film", "", names(res_pairfilt))
+names(res_pairfilt) <- gsub("CA [[:punct:]] S3 [[:punct:]] AS", "CAS3AS_v_CAAS", names(res_pairfilt))
+names(res_pairfilt) <- gsub("PHA [[:punct:]] G1 [[:punct:]] AS PHA [[:punct:]] AS", "PHAG1AS_v_PHAAS", names(res_pairfilt))
+names(res_pairfilt) <- gsub(" ", "_", names(res_pairfilt))
+
+res_pairfilt$rem <- ifelse(res_pairfilt$q_CAS3AS_v_CAAS < 0.05 | res_pairfilt$q_PHAG1AS_v_PHAAS < 0.05, "keep", "remove")
+res_pairfilt2 <- res_pairfilt[res_pairfilt$rem == "keep",]
+
+df_fig_pair <- res_pairfilt2 %>%
+  dplyr::transmute(taxon,
+                   `CA + S3 + AS vs. CA + AS` = round(lfc_CAS3AS_v_CAAS, 2),
+                   `PHA + G1 + AS vs. PHA + AS` = round(lfc_PHAG1AS_v_PHAAS, 2)) %>%
+  tidyr::pivot_longer(cols = `CA + S3 + AS vs. CA + AS`:`PHA + G1 + AS vs. PHA + AS`, 
+                      names_to = "group", values_to = "value") %>%
+  dplyr::arrange(taxon)
+
+
+lo = floor(min(df_fig_pair$value))
+up = ceiling(max(df_fig_pair$value))
+mid = (lo + up)/2
+fig_pair = df_fig_pair %>%
+  ggplot(aes(x = group, y = taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(group, taxon, label = value), color = "black", size = 4) +
+  labs(x = NULL, y = NULL, title = "Log fold changes for globally significant taxa") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+fig_pair
+
+
+## this seems weird... let's do ancombc2 on the subsetted data like I did with ancombc1
+
+################################################################################################################
+# Bacteria data
+
+# Bacteria: CA film + S3 + AS and CA film + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza",
+                        tree="caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_bac2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_b_12122024.txt")
+
+sample_variables(pswd)
+metadata_b <- read.delim("metadata/metadata_b_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_film)
+pswd_film@sam_data
+
+# Subset for CA film + S3 + AS and CA film + AS conditions only (all timepoints because replicates are limited)
+pswd_filmsub <- subset_samples(pswd, Testcond == "CA film + S3 + AS" | Testcond == "CA film + AS")
+print(pswd_filmsub)
+unique(pswd_filmsub@sam_data$Testcond)
+pswd_filmsub@sam_data
+
+# Run ancombc2 function using the phyloseq object
+out2 = ancombc2(data = pswd_filmsub, tax_level = "Genus", 
+                fix_formula = "Testcond", 
+                p_adj_method = "holm",
+                alpha = 0.05,
+                verbose = TRUE)
+
+res2 <- out2$res
+res2[res2$`q_TestcondCA film + S3 + AS` < 0.05, colnames(res2)[grepl("taxon|TestcondCA", colnames(res2))]]
+res2[res2$`diff_robust_TestcondCA film + S3 + AS` == TRUE,]
+
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAAS_ancombc2res_01212026.tsv")
+cas3_res <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAAS_ancombc2res_01212026.tsv")
+
+cas3_ressig <- cas3_res[cas3_res$`q_TestcondCA film + S3 + AS` < 0.05,]
+cas3_ressigsen <- cas3_res[cas3_res$`diff_robust_TestcondCA film + S3 + AS` == TRUE,]
+
+
+##################################################################################################################
+# Now do this for Bacteria: PHA film + AS and PHA film + G1 + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza",
+                        tree="caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_bac2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_b_12122024.txt")
+
+sample_variables(pswd)
+metadata_b <- read.delim("metadata/metadata_b_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+pswd_film@sam_data
+
+# Subset for PHA film + G1 + AS and PHA film + AS conditions only (all timepoints because replicates are limited)
+pswd_filmsub <- subset_samples(pswd, Testcond == "PHA film + G1 + AS" | Testcond == "PHA film + AS")
+print(pswd_filmsub)
+unique(pswd_filmsub@sam_data$Testcond)
+pswd_filmsub@sam_data
+
+# Run ancombc function using the phyloseq object
+# Since I have small sample sizes, I set "conserve = TRUE" and lowered the p value cutoff for significance 
+# from 0.05 to 0.01
+# But I can loosen these restraints if we want
+# out = ancombc(data = pswd_filmsub, tax_level = "Genus", 
+#               formula = "Testcond", 
+#               p_adj_method = "holm",
+#               conserve = TRUE,
+#               alpha = 0.01,
+#               verbose = TRUE)
+
+out2 = ancombc2(data = pswd_filmsub, tax_level = "Genus", 
+                fix_formula = "Testcond", 
+                p_adj_method = "holm",
+                alpha = 0.05,
+                verbose = TRUE)
+
+# res = out$res
+# res_global = out$res_global
+
+res2 <- out2$res
+res2[res2$`q_TestcondPHA film + G1 + AS` < 0.05,colnames(res2)[grepl("taxon|Testcond", colnames())]]
+res2[res2$`diff_robust_TestcondPHA film + G1 + AS` == TRUE,]
+
+# from 12/03/2025, I've now updated it since then
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHAAS_ancombc2res_12032025.tsv")
+phag1_res1203 <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHAAS_ancombc2res_12032025.tsv")
+
+# 01/21/2026
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHAAS_ancombc2res_01212026.tsv")
+phag1_res <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHAAS_ancombc2res_01212026.tsv")
+
+phag1_ressig <- phag1_res[phag1_res$`q_TestcondPHA film + G1 + AS` < 0.05,]
+phag1_ressigsen <- phag1_res[phag1_res$`diff_robust_TestcondPHA film + G1 + AS` == TRUE,]
+
+##################################################################################################################
+# Now do this for Archaea: CA film + S3 + AS and CA film + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/arc2analysis/16S-table-nocmb-rarefied-3000_filtered.qza",
+                        tree="caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_arc2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_a_12122024.txt")
+
+sample_variables(pswd)
+metadata_a <- read.delim("metadata/metadata_a_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_film)
+pswd_film@sam_data
+
+# Subset for CA film + S3 + AS and CA film + AS conditions (all timepoints because replicates are limited)
+# pswd_filmsub <- subset_samples(pswd_film, Testcond == "CA film + S3 + AS" | Testcond == "CA film + AS") # only have CA + AS for baseline to compare to
+pswd_filmsub <- subset_samples(pswd_film, Testcond == "CA film + S3 + AS" | Testcond == "CA film + AS"|Testcond == "PHA film + AS") # only have 2 samples for CA + AS, since NMDS plot shows they are similar to PHA + AS group these together
+print(pswd_filmsub)
+pswd_filmsub@sam_data
+# drop <- c("A114_62_3CA_S3", "A108_62_2CA_S3", "A117_62_FCA_S3") # drop these if you want to remove the 3 samples that didn't cluster
+# drop <- "A101_61_1CA_S3" # drop this if you want to remove the CA + S3 + AS sample that clusters more with the CA + AS samples
+# drop <- c("A114_62_3CA_S3", "A108_62_2CA_S3", "A117_62_FCA_S3", "A101_61_1CA_S3") # if you want to combine the two above lines and drop all 4
+# pswd_filmsub = prune_samples(!(sample_names(pswd_filmsub) %in% drop), pswd_filmsub)
+pswd_filmsub@sam_data
+
+unique(pswd_filmsub@sam_data$Testcond)
+pswd_filmsub@sam_data$Newgroup <- NA
+
+for (i in 1:nrow(pswd_filmsub@sam_data)) {
+  if (pswd_filmsub@sam_data$Testcond[i] == "CA film + S3 + AS") {
+    pswd_filmsub@sam_data$Newgroup[i] <- "B"
+  }
+  else {
+    pswd_filmsub@sam_data$Newgroup[i] <- "A"
+  }
+}
+
+pswd_filmsub@sam_data
+
+# Run ancombc function using the phyloseq object
+# Since I have small sample sizes, I set "conserve = TRUE" and lowered the p value cutoff for significance 
+# from 0.05 to 0.01
+# But I can loosen these restraints if we want
+# out = ancombc(data = pswd_filmsub, tax_level = "Genus", 
+#               formula = "Testcond", 
+#               p_adj_method = "holm",
+#               conserve = TRUE,
+#               alpha = 0.01,
+#               verbose = TRUE)
+
+out2 = ancombc2(data = pswd_filmsub, tax_level = "Genus", 
+                fix_formula = "Newgroup", 
+                p_adj_method = "holm",
+                alpha = 0.05,
+                verbose = TRUE)
+
+# res = out$res
+# res_global = out$res_global
+
+res2 <- out2$res
+res2[res2$q_NewgroupB < 0.05, colnames(res2)[grepl("taxon|NewgroupB", colnames(res2))]]
+
+
+# if we exclude only the CA + S3 + AS t1 sample and group the CA + AS with PHA + AS for ancombc2 analysis - lfc methanosarcina is 6.997 for this
+# I don't think we have enough reason to exclude the 3 rightward samples
+# if we exclude the 3 rightward samples and the CA + S3 + AS t1 and group the CA + AS with PHA + AS, lfc methanosarcina is 6.406
+# if we only exclude the 3 rightward samples, and group the CA + AS with PHA + AS, lfc methanosarcina is 5.65
+# if we keep all samples and group the CA + AS with PHA + AS, lfc methanosarcina is 6.647
+# regardless, methanosarcina is the only significant archaea for the above scenarios
+
+# if I only compare CA + S3 + AS to CA + AS (do not loop in PHA + AS for added statistical power) and keep all samples, lfc methanosarcina is 6.158
+# BUT Candidatus Methanoplasma is shown as significant by q value, with a lfc of 2.034 (but it does not pass the sensitivity analysis)
+# if I only compare CA + S3 + AS to CA + AS (do not loop in PHA + AS for added statistical power) and remove the CA + S3 + AS t1 sample, lfc methanosarcina is 6.61
+# and Candidatus Methanoplasma is shown as significant by q value, with a lfc of 2.154 (but it does not pass the sensitivity analysis)
+# soooooo which comparison do I choose??
+# I'm leaning towards scenario 4 - group CA + AS with PHA + AS and keep all samples 
+
+
+## 12/03/2025 ok need to update my heatmaps cus i think it's best to keep all samples but group CA + AS and PHA + AS together which my current heatmaps havent done. doesnt change the results much, just the lfc values. also update the nmds plot to remove those outliers. 
+# note that i've now started grouping the CA and PHA controls together for archaea only to have more samples/stronger statistical power
+# so bacteria results are fine but i need to update the heatmap to show new lfc values for the archaea ca comparison and pha comparison
+### NOTE I think on my 12/03 results I actually kept all samples but did not group CA + AS and PHA + AS together
+# So for my 12/09 results I kept all samples and grouped CA + AS and PHA + AS together
+
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAAS_ARCHAEA_ancombc2res_12032025.tsv")
+cas3archea_res1203 <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAAS_ARCHAEA_ancombc2res_12032025.tsv")
+cas3archea_res1203[cas3archea_res1203$q_NewgroupB < 0.05, colnames(cas3archea_res1203)[grepl("taxon|NewgroupB", colnames(cas3archea_res1203))]]
+
+cas3archea_ressig <- cas3archea_res[cas3archea_res$`q_TestcondCAA film + S3 + AS` < 0.05,]
+cas3archea_ressig
+cas3archea_ressigsen <- cas3archea_res[cas3archea_res$`diff_robust_TestcondCA film + S3 + AS` == TRUE,]
+cas3archea_ressigsen
+
+## 12/09/2025 I kept all samples and grouped CA + AS and PHA + AS together - no Candidatus Methanoplasma
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAPHAAS_ARCHAEA_ancombc2res_12092025.tsv")
+cas3archaea_res1209 <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAPHAAS_ARCHAEA_ancombc2res_12092025.tsv")
+
+## 01/21/2026 I kept all samples and grouped CA + AS and PHA + AS together - no Candidatus Methanoplasma
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAPHAAS_ARCHAEA_ancombc2res_01212026.tsv")
+cas3archaea_res <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/CAS3AS_CAPHAAS_ARCHAEA_ancombc2res_01212026.tsv")
+
+
+cas3archaea_ressig <- cas3archaea_res[cas3archaea_res$`q_NewgroupB` < 0.05,]
+cas3archaea_ressig
+cas3archaea_ressigsen <- cas3archaea_res[cas3archaea_res$`diff_robust_NewgroupB` == TRUE,]
+cas3archaea_ressigsen
+##################################################################################################################
+# Now do this for Archaea: PHA film + AS and PHA film + G1 + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/arc2analysis/16S-table-nocmb-rarefied-3000_filtered.qza",
+                        tree="caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_arc2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_a_12122024.txt")
+
+sample_variables(pswd)
+metadata_a <- read.delim("metadata/metadata_a_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_film)
+
+# Subset for PHA film + G1 + AS and PHA film + AS conditions only (all timepoints because replicates are limited)
+# pswd_filmsub <- subset_samples(pswd, Testcond == "PHA film + G1 + AS" | Testcond == "PHA film + AS")
+pswd_filmsub <- subset_samples(pswd, Testcond == "PHA film + G1 + AS" | Testcond == "PHA film + AS"|Testcond == "CA film + AS")
+print(pswd_filmsub)
+unique(pswd_filmsub@sam_data$Testcond)
+pswd_filmsub@sam_data
+
+pswd_filmsub@sam_data$Newgroup <- NA
+
+for (i in 1:nrow(pswd_filmsub@sam_data)) {
+  if (pswd_filmsub@sam_data$Testcond[i] == "PHA film + G1 + AS") {
+    pswd_filmsub@sam_data$Newgroup[i] <- "B"
+  }
+  else {
+    pswd_filmsub@sam_data$Newgroup[i] <- "A"
+  }
+}
+
+pswd_filmsub@sam_data
+
+# Run ancombc function using the phyloseq object
+# Since I have small sample sizes, I set "conserve = TRUE" and lowered the p value cutoff for significance 
+# from 0.05 to 0.01
+# But I can loosen these restraints if we want
+# out = ancombc(data = pswd_filmsub, tax_level = "Genus", 
+#               formula = "Testcond", 
+#               p_adj_method = "holm",
+#               conserve = TRUE,
+#               alpha = 0.01,
+#               verbose = TRUE)
+
+## NOTE: a lot of warnings produced. There is only one sample in the PHA film + AS condition so it is 
+# likely unreliable
+# Were any warnings produced in the above 3 runs?
+# #1 no
+# #2 no
+# #3 no
+# so warnings were only produced for this comparison
+
+out2 = ancombc2(data = pswd_filmsub, tax_level = "Genus", 
+                fix_formula = "Newgroup", 
+                p_adj_method = "holm",
+                alpha = 0.05,
+                verbose = TRUE)
+
+
+# res = out$res
+# res_global = out$res_global
+
+res2 <- out2$res
+res2[res2$q_NewgroupB < 0.05, colnames(res2)[grepl("taxon|NewgroupB", colnames(res2))]]
+
+# 12/03 kept all samples but did not group CA + AS and PHA + AS together for higher statistical power
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHAAS_ARCHAEA_ancombc2res_12032025.tsv")
+phag1_archaea_res1203 <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHAAS_ARCHAEA_ancombc2res_12032025.tsv")
+phag1_archaea_res1203[phag1_archaea_res1203$`q_TestcondPHA film + G1 + AS` < 0.05, colnames(phag1_archaea_res1203)[grepl("taxon|TestcondPHA", colnames(phag1_archaea_res1203))]]
+
+phag1_archaea_ressig <- phag1_archaea_res[phag1_archaea_res$`q_TestcondPHA film + G1 + AS` < 0.05,]
+phag1_archaea_ressigsen <- phag1_archaea_res[phag1_archaea_res$`diff_robust_TestcondPHA film + G1 + AS` == TRUE,]
+
+# 12/09 kept all samples and grouped CA + AS and PHA + AS together for higher statistical power
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHACAAS_ARCHAEA_ancombc2res_12092025.tsv")
+phag1_archaea_res1209 <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHACAAS_ARCHAEA_ancombc2res_12092025.tsv")
+
+# 01/21/2026 kept all samples and grouped CA + AS and PHA + AS together for higher statistical power
+write_tsv(res2, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHACAAS_ARCHAEA_ancombc2res_01212026.tsv")
+phag1_archaea_res <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/PHAG1AS_PHACAAS_ARCHAEA_ancombc2res_01212026.tsv")
+
+
+phag1_archaea_ressig <- phag1_archaea_res[phag1_archaea_res$`q_NewgroupB` < 0.05,]
+phag1_archaea_ressig
+phag1_archaea_ressigsen <- phag1_archaea_res[phag1_archaea_res$`diff_robust_NewgroupB` == TRUE,]
+phag1_archaea_ressigsen
+
+########################################################################################################################
+# 12/03/25 Combine these dataframes to make a heatmap
+# first rename their column names to specify which data frame it comes from
+tomatch <- c("taxon", "TestcondCA film  S3 [[:punct:]] AS")
+cas3_ressig_filt <- cas3_ressig[,grepl("taxon|TestcondCA film [[:punct:]] S3 [[:punct:]] AS", names(cas3_ressig))]
+names(cas3_ressig_filt) <- gsub("TestcondCA film [[:punct:]] S3 [[:punct:]] AS","CAS3AS_v_CAAS",names(cas3_ressig_filt))
+cas3archea_ressig_filt <- cas3archea_ressig[,grepl("taxon|TestcondCA film [[:punct:]] S3 [[:punct:]] AS", names(cas3archea_ressig))]
+names(cas3archea_ressig_filt) <- gsub("TestcondCA film [[:punct:]] S3 [[:punct:]] AS","CAS3AS_v_CAAS",names(cas3archea_ressig_filt))
+
+tomatch <- c("taxon", "TestcondPHA film [[:punct:]] G1 [[:punct:]] AS")
+phag1_ressig_filt <- phag1_ressig[,grepl("taxon|TestcondPHA film [[:punct:]] G1 [[:punct:]] AS", names(phag1_ressig))]
+names(phag1_ressig_filt) <- gsub("TestcondPHA film [[:punct:]] G1 [[:punct:]] AS","PHAG1AS_v_PHAAS",names(phag1_ressig_filt))
+phag1_archaea_ressig_filt <- phag1_archaea_ressig[,grepl("taxon|TestcondPHA film [[:punct:]] G1 [[:punct:]] AS", names(phag1_archaea_ressig))]
+names(phag1_archaea_ressig_filt) <- gsub("TestcondPHA film [[:punct:]] G1 [[:punct:]] AS","PHAG1AS_v_PHAAS",names(phag1_archaea_ressig_filt))
+
+# 12/09/25 and 01/21/2026 combining my dataframes to make a heatmap - different colnames than 12/03/25 dataframes
+cas3_ressig_filt <- cas3_ressig[,grepl("taxon|TestcondCA film [[:punct:]] S3 [[:punct:]] AS", names(cas3_ressig))]
+names(cas3_ressig_filt) <- gsub("TestcondCA film [[:punct:]] S3 [[:punct:]] AS","CAS3AS_v_CAAS",names(cas3_ressig_filt))
+
+cas3archaea_ressig_filt <- cas3archaea_ressig[,grepl("taxon|NewgroupB", names(cas3archaea_ressig))]
+names(cas3archaea_ressig_filt) <- gsub("NewgroupB","CAS3AS_v_CAAS",names(cas3archaea_ressig_filt))
+
+phag1_ressig_filt <- phag1_ressig[,grepl("taxon|TestcondPHA film [[:punct:]] G1 [[:punct:]] AS", names(phag1_ressig))]
+names(phag1_ressig_filt) <- gsub("TestcondPHA film [[:punct:]] G1 [[:punct:]] AS","PHAG1AS_v_PHAAS",names(phag1_ressig_filt))
+
+phag1_archaea_ressig_filt <- phag1_archaea_ressig[,grepl("taxon|NewgroupB", names(phag1_archaea_ressig))]
+names(phag1_archaea_ressig_filt) <- gsub("NewgroupB","PHAG1AS_v_PHAAS",names(phag1_archaea_ressig_filt))
+
+#######
+# combine dataframes
+
+# cas3_resall <- rbind(cas3_ressig_filt, cas3archea_ressig_filt)
+cas3_resall <- rbind(cas3_ressig_filt, cas3archaea_ressig_filt)
+phag1_resall <- rbind(phag1_ressig_filt, phag1_archaea_ressig_filt)
+
+df_fig <- merge(cas3_resall, phag1_resall, by="taxon", all = TRUE)
+write_tsv(df_fig, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/ancombc2_df_fig_01212026.tsv")
+df_fig <- read_tsv("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC2/ancombc2_df_fig_01212026.tsv")
+df_fig$diff_CAS3AS_v_CAAS <- ifelse(is.na(df_fig$diff_CAS3AS_v_CAAS) == TRUE, FALSE, df_fig$diff_CAS3AS_v_CAAS)
+df_fig$diff_robust_CAS3AS_v_CAAS <- ifelse(is.na(df_fig$diff_robust_CAS3AS_v_CAAS) == TRUE, FALSE, df_fig$diff_robust_CAS3AS_v_CAAS)
+
+df_fig$diff_PHAG1AS_v_PHAAS <- ifelse(is.na(df_fig$diff_PHAG1AS_v_PHAAS) == TRUE, FALSE, df_fig$diff_PHAG1AS_v_PHAAS)
+df_fig$diff_robust_PHAG1AS_v_PHAAS <- ifelse(is.na(df_fig$diff_robust_PHAG1AS_v_PHAAS) == TRUE, FALSE, df_fig$diff_robust_PHAG1AS_v_PHAAS)
+
+# df_fig <- df_fig[1:12,] # no "Unknown" in 12/09 tables
+
+df_fig_1 = df_fig %>%
+  dplyr::mutate(lfc1 = ifelse(diff_CAS3AS_v_CAAS == TRUE, 
+                              round(lfc_CAS3AS_v_CAAS, 2), 0),
+                lfc2 = ifelse(diff_PHAG1AS_v_PHAAS == TRUE, 
+                              round(lfc_PHAG1AS_v_PHAAS, 2), 0)) %>%
+  tidyr::pivot_longer(cols = lfc1:lfc2, 
+                      names_to = "group", values_to = "value") %>%
+  dplyr::arrange(taxon)
+
+df_fig_2 = df_fig %>%
+  dplyr::mutate(lfc1 = ifelse(diff_robust_CAS3AS_v_CAAS==TRUE, 
+                              "B", "P"),
+                lfc2 = ifelse(diff_robust_PHAG1AS_v_PHAAS==TRUE, 
+                              "B", "P")) %>%
+  tidyr::pivot_longer(cols = lfc1:lfc2, 
+                      names_to = "group", values_to = "tobold") %>%
+  dplyr::arrange(taxon)
+
+df_fig_f = df_fig_1 %>%
+  dplyr::left_join(df_fig_2, by = c("taxon", "group"))
+
+df_fig_f$group = recode(df_fig_f$group, 
+                          `lfc1` = "CA + S3 + AS vs. CA + AS",
+                          `lfc2` = "PHA + G1 + AS vs. PHA + AS")
+df_fig_f$group = factor(df_fig_f$group, 
+                          levels = c("CA + S3 + AS vs. CA + AS",
+                                     "PHA + G1 + AS vs. PHA + AS"))
+df_fig_f$group
+df_fig_f$group <- gsub("vs. ", "\nvs.\n", df_fig_f$group)
+df_fig_f$group
+# df_fig_f$tobold <- ifelse(is.na(df_fig_f$tobold) == TRUE, "N", df_fig_f$tobold)
+
+
+up = ceiling(max(df_fig_f$value))
+lo = ceiling(max(df_fig_f$value))*-1
+mid = (lo + up)/2
+fig = df_fig_f %>%
+  ggplot(aes(x = group, y = taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = "logFC") +
+  geom_text(aes(group, taxon, label = ifelse(value == 0, NA, value), fontface = ifelse(tobold == "B", "bold", "plain")), size = 4) +
+  scale_color_identity(guide = "none") +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        text = element_text(size = 13, color = "black"))
+fig
+
+
+## try using pheatmap instead of ggplot so I can add methanogen and bacteria labels
+# df_fig_f$Domain <- NA
+# for (i in 1:nrow(df_fig_f)) {
+#   df_fig_f$Domain <- ifelse(df_fig_f$taxon[i] == "Methanosarcina" | df_fig_f$taxon[i] == "Methanomassiliicoccus", "Archaea", "Bacteria")
+# }
+
+df_fig$Domain <- NA
+for (i in 1:nrow(df_fig)) {
+  df_fig$Domain[i] <- ifelse(df_fig$taxon[i] == "Methanosarcina" | df_fig$taxon[i] == "Methanomassiliicoccus", "Archaea", "Bacteria")
+}
+
+annotation_col = df_fig$Domain
+
+rownames(annotation_col) = df_fig$taxon
+
+annotation_row = data.frame(
+  Domain = df_fig$Domain)
+annotation_row
+rownames(annotation_row) = df_fig$taxon
+annotation_row
+
+ann_colors = list(
+  Domain = c(Bacteria = "#7570B3", Archaea = "#E7298A")
+)
+
+library(tidyverse)
+df_figb <- df_fig
+rownames(df_figb) <- df_figb[,"taxon"]
+df_figb <- df_figb[,-1]
+df_figb <- df_figb[,colnames(df_figb)[grepl("lfc", colnames(df_figb))]]
+df_figb[is.na(df_figb)] <- 0
+
+collab <- c("CA + S3 + AS\nvs. CA + AS", "PHA + G1 + AS\nvs. PHA + AS")
+newnames <- lapply(
+  c("CA + S3 + AS\nvs. CA + AS", "PHA + G1 + AS\nvs. PHA + AS"),
+  function(x) bquote(.(x)))
+newnames
+
+library(pheatmap)
+library(grid)
+
+draw_colnames_45 <- function (coln, gaps, ...) {
+  coord = pheatmap:::find_coordinates(length(coln), gaps)
+  x = coord$coord - 0.5 * coord$size
+  res = textGrob(coln, x = x, y = unit(1, "npc") - unit(3,"bigpts"), vjust = 3, hjust = .5, rot = 360, gp = gpar(...))
+  return(res)}
+assignInNamespace(x="draw_colnames", value="draw_colnames_45",
+                  ns=asNamespace("pheatmap"))
+# rm(draw_colnames_45)
+
+my_palette <- colorRampPalette(c("blue", "black", "red"))(n = 299)
+
+# pheatmap(as.matrix(df_figb), cellheight=10, cluster_cols=FALSE,
+#          fontsize = 10, show_rownames=TRUE, fontsize_row=8, fontsize_col=8,
+#          labels_col = as.expression(collab), labels_row = as.expression(rownames(df_figb)), border_color=NA, 
+#          annotation_row = annotation_row, annotation_colors = ann_colors, breaks=seq(-10, 10, length.out=300), angle_col = 0)
+
+ancombcph <- pheatmap(df_figb, col=my_palette, cellheight=20, cellwidth=150, cluster_cols=FALSE,
+        fontsize = 12, show_rownames=TRUE,
+        labels_col = as.expression(newnames), 
+        annotation_row = annotation_row, annotation_colors = ann_colors,
+        annotation_names_row = FALSE,
+        breaks=seq(-6, 6, length.out=300))
+
+
+ancombcph
+ancombcphgg <- as_ggplot(ancombcph$gtable)
+ancombcphgg <- ancombcphgg + theme(plot.margin = margin(50, 0, 0, 0)) 
+ancombcphgg
+# ancombcphgg <- ancombcphgg + theme_cowplot(font_size = 12)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+annotation_col = data.frame(
+  CellType = factor(rep(c("CT1", "CT2"), 5)), 
+  Time = 1:5
+)
+rownames(annotation_col) = paste("Test", 1:10, sep = "")
+
+annotation_row = data.frame(
+  GeneClass = factor(rep(c("Path1", "Path2", "Path3"), c(10, 4, 6)))
+)
+rownames(annotation_row) = paste("Gene", 1:20, sep = "")
+annotation_row
+
+ann_colors = list(
+  Time = c("white", "firebrick"),
+  CellType = c(CT1 = "#1B9E77", CT2 = "#D95F02"),
+  GeneClass = c(Path1 = "#7570B3", Path2 = "#E7298A", Path3 = "#66A61E")
+)
+
+library(ComplexHeatmap)
+test = matrix(rnorm(200), 20, 10)
+test[1:10, seq(1, 10, 2)] = test[1:10, seq(1, 10, 2)] + 3
+test[11:20, seq(2, 10, 2)] = test[11:20, seq(2, 10, 2)] + 2
+test[15:20, seq(2, 10, 2)] = test[15:20, seq(2, 10, 2)] + 4
+colnames(test) = paste("Test", 1:10, sep = "")
+rownames(test) = paste("Gene", 1:20, sep = "")
+test
+
+x
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################################################################################################
+### This is for BACTERIA data (I rarefied 10,000 cutoff)
+
+# Bacteria: CA film + S3 + AS and CA film + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza",
+                        tree="caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_bac2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_b_12122024.txt")
+
+sample_variables(pswd)
+metadata_b <- read.delim("metadata/metadata_b_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_film)
+
+# Subset for CA film + S3 + AS and CA film + AS conditions only (all timepoints because replicates are limited)
+pswd_filmsub <- subset_samples(pswd, Testcond == "CA film + S3 + AS" | Testcond == "CA film + AS")
+print(pswd_filmsub)
+unique(pswd_filmsub@sam_data$Testcond)
+
+# Run ancombc function using the phyloseq object
+# Since I have small sample sizes, I set "conserve = TRUE" and lowered the p value cutoff for significance 
+# from 0.05 to 0.01
+# But I can loosen these restraints if we want
+out = ancombc(data = pswd_filmsub, tax_level = "Genus", 
+              formula = "Testcond", 
+              p_adj_method = "holm",
+              conserve = TRUE,
+              alpha = 0.01,
+              verbose = TRUE)
+
+res = out$res
+res_global = out$res_global
+
+## ANCOMBC primary result
+# LFC
+tab_lfc = res$lfc
+col_name = c("Taxon", "Intercept", "CA film + S3 + AS")
+colnames(tab_lfc) = col_name
+tab_lfc %>% 
+  datatable(caption = "Log Fold Changes from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# SE
+tab_se = res$se
+colnames(tab_se) = col_name
+tab_se %>% 
+  datatable(caption = "SEs from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Test statistic
+tab_w = res$W
+colnames(tab_w) = col_name
+tab_w %>% 
+  datatable(caption = "Test Statistics from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# P-values
+tab_p = res$p_val
+colnames(tab_p) = col_name
+tab_p %>% 
+  datatable(caption = "P-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Adjusted p-values
+tab_q = res$q
+colnames(tab_q) = col_name
+tab_q %>% 
+  datatable(caption = "Adjusted p-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Differentially abundant taxa
+tab_diff = res$diff_abn
+colnames(tab_diff) = col_name
+tab_diff %>% 
+  datatable(caption = "Differentially Abundant Taxa from the Primary Result")
+
+cadiff <- tab_diff[tab_diff$`CA film + S3 + AS` == TRUE,]
+# ok results??
+
+tab_lfc_filt <- tab_lfc[tab_lfc$Taxon %in% cadiff$Taxon,]
+colnames(tab_lfc_filt) <- c("Taxon", "Intercept LFC", "CA film + S3 + AS LFC")
+
+tab_se_filt <- tab_se[tab_se$Taxon %in% cadiff$Taxon,]
+colnames(tab_se_filt) <- c("Taxon", "Intercept SE", "CA film + S3 + AS SE")
+
+tab_w_filt <- tab_w[tab_w$Taxon %in% cadiff$Taxon,]
+colnames(tab_w_filt) <- c("Taxon", "Intercept W", "CA film + S3 + AS W")
+
+tab_p_filt <- tab_p[tab_p$Taxon %in% cadiff$Taxon,]
+colnames(tab_p_filt) <- c("Taxon", "Intercept P", "CA film + S3 + AS P")
+
+tab_q_filt <- tab_q[tab_q$Taxon %in% cadiff$Taxon,]
+colnames(tab_q_filt) <- c("Taxon", "Intercept Q", "CA film + S3 + AS Q")
+
+tab_diff_filt <- tab_diff[tab_diff$Taxon %in% cadiff$Taxon,]
+colnames(tab_diff_filt) <- c("Taxon", "Intercept diff", "CA film + S3 + AS diff")
+
+#put all data frames into list
+df_list <- list(tab_lfc_filt, tab_se_filt, tab_w_filt, tab_p_filt, tab_q_filt, tab_diff_filt)
+
+#merge all data frames in list
+res_filt <- df_list %>% reduce(full_join, by='Taxon')
+
+# save list
+writexl::write_xlsx(res_filt, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC/CAfilm_S3_AS_bacteria_ancombc.xlsx")
+
+
+
+
+### Visualization of differentially abundant taxa heatmap
+tab_diff = res$diff_abn
+tab_diff %>% datatable(caption = "Differentially Abundant Taxa 
+                       from the Global Test Result")
+
+sig_taxa = tab_diff %>%
+  dplyr::filter(`TestcondCA film + S3 + AS` == TRUE) %>%
+  .$taxon
+
+tab_lfc = res$lfc
+col_name = c("Taxon", "Intercept", "CA film + S3 + AS vs. CA film + AS")
+colnames(tab_lfc) = col_name
+tab_lfc <- tab_lfc[,-2]
+
+df_CAS3AS = tab_lfc %>%
+  filter(Taxon %in% sig_taxa)
+
+df_heat = df_CAS3AS %>%
+  pivot_longer(cols = -one_of("Taxon"),
+               names_to = "region", values_to = "value") %>%
+  mutate(value = round(value, 2))
+df_heat$Taxon = factor(df_heat$Taxon, levels = sort(sig_taxa))
+
+lo = floor(min(df_heat$value))
+up = ceiling(max(df_heat$value))
+mid = (lo + up)/2
+p_heat = df_heat %>%
+  ggplot(aes(x = region, y = Taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(region, Taxon, label = value), color = "black", size = 7) +
+  labs(x = NULL, y = NULL, size = 7,
+       title = "Log fold changes for globally significant taxa") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        text = element_text(size = 20))
+p_heat
+
+##################################################################################################################
+# 12/17/2024
+# Now do this for Bacteria: PHA film + AS and PHA film + G1 + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza",
+                        tree="caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_bac2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_b_12122024.txt")
+
+sample_variables(pswd)
+metadata_b <- read.delim("metadata/metadata_b_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_filmsub)
+
+# Subset for PHA film + G1 + AS and PHA film + AS conditions only (all timepoints because replicates are limited)
+pswd_filmsub <- subset_samples(pswd, Testcond == "PHA film + G1 + AS" | Testcond == "PHA film + AS")
+print(pswd_filmsub)
+unique(pswd_filmsub@sam_data$Testcond)
+
+# Run ancombc function using the phyloseq object
+# Since I have small sample sizes, I set "conserve = TRUE" and lowered the p value cutoff for significance 
+# from 0.05 to 0.01
+# But I can loosen these restraints if we want
+out = ancombc(data = pswd_filmsub, tax_level = "Genus", 
+              formula = "Testcond", 
+              p_adj_method = "holm",
+              conserve = TRUE,
+              alpha = 0.01,
+              verbose = TRUE)
+
+res = out$res
+res_global = out$res_global
+
+## ANCOMBC primary result
+# LFC
+tab_lfc = res$lfc
+col_name = c("Taxon", "Intercept", "PHA film + G1 + AS")
+colnames(tab_lfc) = col_name
+tab_lfc %>% 
+  datatable(caption = "Log Fold Changes from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# SE
+tab_se = res$se
+colnames(tab_se) = col_name
+tab_se %>% 
+  datatable(caption = "SEs from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Test statistic
+tab_w = res$W
+colnames(tab_w) = col_name
+tab_w %>% 
+  datatable(caption = "Test Statistics from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# P-values
+tab_p = res$p_val
+colnames(tab_p) = col_name
+tab_p %>% 
+  datatable(caption = "P-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Adjusted p-values
+tab_q = res$q
+colnames(tab_q) = col_name
+tab_q %>% 
+  datatable(caption = "Adjusted p-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Differentially abundant taxa
+tab_diff = res$diff_abn
+colnames(tab_diff) = col_name
+tab_diff %>% 
+  datatable(caption = "Differentially Abundant Taxa from the Primary Result")
+
+cadiff <- tab_diff[tab_diff$`PHA film + G1 + AS` == TRUE,]
+
+tab_lfc_filt <- tab_lfc[tab_lfc$Taxon %in% cadiff$Taxon,]
+colnames(tab_lfc_filt) <- c("Taxon", "Intercept LFC", "PHA film + G1 + AS LFC")
+
+tab_se_filt <- tab_se[tab_se$Taxon %in% cadiff$Taxon,]
+colnames(tab_se_filt) <- c("Taxon", "Intercept SE", "PHA film + G1 + AS SE")
+
+tab_w_filt <- tab_w[tab_w$Taxon %in% cadiff$Taxon,]
+colnames(tab_w_filt) <- c("Taxon", "Intercept W", "PHA film + G1 + AS W")
+
+tab_p_filt <- tab_p[tab_p$Taxon %in% cadiff$Taxon,]
+colnames(tab_p_filt) <- c("Taxon", "Intercept P", "PHA film + G1 + AS P")
+
+tab_q_filt <- tab_q[tab_q$Taxon %in% cadiff$Taxon,]
+colnames(tab_q_filt) <- c("Taxon", "Intercept Q", "PHA film + G1 + AS Q")
+
+tab_diff_filt <- tab_diff[tab_diff$Taxon %in% cadiff$Taxon,]
+colnames(tab_diff_filt) <- c("Taxon", "Intercept diff", "PHA film + G1 + AS diff")
+
+#put all data frames into list
+df_list <- list(tab_lfc_filt, tab_se_filt, tab_w_filt, tab_p_filt, tab_q_filt, tab_diff_filt)
+
+#merge all data frames in list
+res_filt <- df_list %>% reduce(full_join, by='Taxon')
+
+# save list
+writexl::write_xlsx(res_filt, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC/PHAfilm_G1_AS_bacteria_ancombc.xlsx")
+
+
+
+
+### Visualization of differentially abundant taxa heatmap
+tab_diff = res$diff_abn
+tab_diff %>% datatable(caption = "Differentially Abundant Taxa 
+                       from the Global Test Result")
+
+sig_taxa = tab_diff %>%
+  dplyr::filter(`TestcondPHA film + G1 + AS` == TRUE) %>%
+  .$taxon
+
+tab_lfc = res$lfc
+col_name = c("Taxon", "Intercept", "PHA film + G1 + AS vs. PHA film + AS")
+colnames(tab_lfc) = col_name
+tab_lfc <- tab_lfc[,-2]
+
+df_PHAG1AS = tab_lfc %>%
+  filter(Taxon %in% sig_taxa)
+
+df_heat = df_PHAG1AS %>%
+  pivot_longer(cols = -one_of("Taxon"),
+               names_to = "region", values_to = "value") %>%
+  mutate(value = round(value, 2))
+df_heat$Taxon = factor(df_heat$Taxon, levels = sort(sig_taxa))
+
+lo = floor(min(df_heat$value))
+up = ceiling(max(df_heat$value))
+mid = (lo + up)/2
+p_heat = df_heat %>%
+  ggplot(aes(x = region, y = Taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(region, Taxon, label = value), color = "black", size = 7) +
+  labs(x = NULL, y = NULL, 
+       title = "Log fold changes for globally significant taxa") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        text = element_text(size = 20))
+p_heat
+
+
+##################################################################################################################
+# 12/17/2024
+# Now do this for Archaea: CA film + S3 + AS and CA film + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/arc2analysis/16S-table-nocmb-rarefied-3000_filtered.qza",
+                        tree="caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_arc2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_a_12122024.txt")
+
+sample_variables(pswd)
+metadata_a <- read.delim("metadata/metadata_a_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_filmsub)
+
+# Subset for CA film + S3 + AS and CA film + AS conditions only (all timepoints because replicates are limited)
+pswd_filmsub <- subset_samples(pswd, Testcond == "CA film + S3 + AS" | Testcond == "CA film + AS")
+print(pswd_filmsub)
+unique(pswd_filmsub@sam_data$Testcond)
+
+
+# Run ancombc function using the phyloseq object
+# Since I have small sample sizes, I set "conserve = TRUE" and lowered the p value cutoff for significance 
+# from 0.05 to 0.01
+# But I can loosen these restraints if we want
+out = ancombc(data = pswd_filmsub, tax_level = "Genus", 
+              formula = "Testcond", 
+              p_adj_method = "holm",
+              conserve = TRUE,
+              alpha = 0.01,
+              verbose = TRUE)
+
+res = out$res
+res_global = out$res_global
+
+
+## ANCOMBC primary result
+# LFC
+tab_lfc = res$lfc
+col_name = c("Taxon", "Intercept", "CA film + S3 + AS")
+colnames(tab_lfc) = col_name
+tab_lfc %>% 
+  datatable(caption = "Log Fold Changes from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# SE
+tab_se = res$se
+colnames(tab_se) = col_name
+tab_se %>% 
+  datatable(caption = "SEs from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Test statistic
+tab_w = res$W
+colnames(tab_w) = col_name
+tab_w %>% 
+  datatable(caption = "Test Statistics from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# P-values
+tab_p = res$p_val
+colnames(tab_p) = col_name
+tab_p %>% 
+  datatable(caption = "P-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Adjusted p-values
+tab_q = res$q
+colnames(tab_q) = col_name
+tab_q %>% 
+  datatable(caption = "Adjusted p-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Differentially abundant taxa
+tab_diff = res$diff_abn
+colnames(tab_diff) = col_name
+tab_diff %>% 
+  datatable(caption = "Differentially Abundant Taxa from the Primary Result")
+
+cadiff <- tab_diff[tab_diff$`CA film + S3 + AS` == TRUE,]
+
+tab_lfc_filt <- tab_lfc[tab_lfc$Taxon %in% cadiff$Taxon,]
+colnames(tab_lfc_filt) <- c("Taxon", "Intercept LFC", "CA film + S3 + AS LFC")
+
+tab_se_filt <- tab_se[tab_se$Taxon %in% cadiff$Taxon,]
+colnames(tab_se_filt) <- c("Taxon", "Intercept SE", "CA film + S3 + AS SE")
+
+tab_w_filt <- tab_w[tab_w$Taxon %in% cadiff$Taxon,]
+colnames(tab_w_filt) <- c("Taxon", "Intercept W", "CA film + S3 + AS W")
+
+tab_p_filt <- tab_p[tab_p$Taxon %in% cadiff$Taxon,]
+colnames(tab_p_filt) <- c("Taxon", "Intercept P", "CA film + S3 + AS P")
+
+tab_q_filt <- tab_q[tab_q$Taxon %in% cadiff$Taxon,]
+colnames(tab_q_filt) <- c("Taxon", "Intercept Q", "CA film + S3 + AS Q")
+
+tab_diff_filt <- tab_diff[tab_diff$Taxon %in% cadiff$Taxon,]
+colnames(tab_diff_filt) <- c("Taxon", "Intercept diff", "CA film + S3 + AS diff")
+
+#put all data frames into list
+df_list <- list(tab_lfc_filt, tab_se_filt, tab_w_filt, tab_p_filt, tab_q_filt, tab_diff_filt)
+
+#merge all data frames in list
+res_filt <- df_list %>% reduce(full_join, by='Taxon')
+
+# save list
+writexl::write_xlsx(res_filt, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC/CAfilm_S3_AS_archaea_ancombc.xlsx")
+
+
+
+
+### Visualization of differentially abundant taxa heatmap
+tab_diff = res$diff_abn
+tab_diff %>% datatable(caption = "Differentially Abundant Taxa 
+                       from the Global Test Result")
+
+sig_taxa = tab_diff %>%
+  dplyr::filter(`TestcondCA film + S3 + AS` == TRUE) %>%
+  .$taxon
+
+tab_lfc = res$lfc
+col_name = c("Taxon", "Intercept", "CA film + S3 + AS vs. CA film + AS")
+colnames(tab_lfc) = col_name
+tab_lfc <- tab_lfc[,-2]
+
+df_CAS3AS = tab_lfc %>%
+  filter(Taxon %in% sig_taxa)
+
+df_heat = df_CAS3AS %>%
+  pivot_longer(cols = -one_of("Taxon"),
+               names_to = "region", values_to = "value") %>%
+  mutate(value = round(value, 2))
+df_heat$Taxon = factor(df_heat$Taxon, levels = sort(sig_taxa))
+
+lo = floor(min(df_heat$value))
+up = ceiling(max(df_heat$value))
+mid = (lo + up)/2
+p_heat = df_heat %>%
+  ggplot(aes(x = region, y = Taxon, fill = value)) + 
+  geom_tile(color = "black") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       na.value = "white", midpoint = mid, limit = c(lo, up),
+                       name = NULL) +
+  geom_text(aes(region, Taxon, label = value), color = "black", size = 7) +
+  labs(x = NULL, y = NULL, 
+       title = "Log fold changes for globally significant taxa") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        text = element_text(size = 20))
+p_heat
+
+
+##################################################################################################################
+# 12/17/2024
+# Now do this for Archaea: PHA film + AS and PHA film + G1 + AS
+
+## load data
+setwd("/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast")
+
+pswd <- qza_to_phyloseq(features="caqiime2b/arc2analysis/16S-table-nocmb-rarefied-3000_filtered.qza",
+                        tree="caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza", 
+                        taxonomy = "output_arc2/qiime2/input/taxonomy.qza", 
+                        metadata= "metadata/metadata_a_12122024.txt")
+
+sample_variables(pswd)
+metadata_a <- read.delim("metadata/metadata_a_12122024.txt")
+
+# Subset for film
+pswd_film <- subset_samples(pswd, Experiment == "BP_Film") # subset only film experiment
+print(pswd_filmsub)
+
+# Subset for PHA film + G1 + AS and PHA film + AS conditions only (all timepoints because replicates are limited)
+pswd_filmsub <- subset_samples(pswd, Testcond == "PHA film + G1 + AS" | Testcond == "PHA film + AS")
+print(pswd_filmsub)
+unique(pswd_filmsub@sam_data$Testcond)
+
+
+# Run ancombc function using the phyloseq object
+# Since I have small sample sizes, I set "conserve = TRUE" and lowered the p value cutoff for significance 
+# from 0.05 to 0.01
+# But I can loosen these restraints if we want
+out = ancombc(data = pswd_filmsub, tax_level = "Genus", 
+              formula = "Testcond", 
+              p_adj_method = "holm",
+              conserve = TRUE,
+              alpha = 0.01,
+              verbose = TRUE)
+
+## NOTE: a lot of warnings produced. There is only one sample in the PHA film + AS condition so it is 
+# likely unreliable
+# Were any warnings produced in the above 3 runs?
+# #1 no
+# #2 no
+# #3 no
+# so warnings were only produced for this comparison
+
+res = out$res
+res_global = out$res_global
+
+
+## ANCOMBC primary result
+# LFC
+tab_lfc = res$lfc
+col_name = c("Taxon", "Intercept", "PHA film + G1 + AS")
+colnames(tab_lfc) = col_name
+tab_lfc %>% 
+  datatable(caption = "Log Fold Changes from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# SE
+tab_se = res$se
+colnames(tab_se) = col_name
+tab_se %>% 
+  datatable(caption = "SEs from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Test statistic
+tab_w = res$W
+colnames(tab_w) = col_name
+tab_w %>% 
+  datatable(caption = "Test Statistics from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# P-values
+tab_p = res$p_val
+colnames(tab_p) = col_name
+tab_p %>% 
+  datatable(caption = "P-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Adjusted p-values
+tab_q = res$q
+colnames(tab_q) = col_name
+tab_q %>% 
+  datatable(caption = "Adjusted p-values from the Primary Result") %>%
+  formatRound(col_name[-1], digits = 2)
+
+# Differentially abundant taxa
+tab_diff = res$diff_abn
+colnames(tab_diff) = col_name
+tab_diff %>% 
+  datatable(caption = "Differentially Abundant Taxa from the Primary Result")
+
+cadiff <- tab_diff[tab_diff$`PHA film + G1 + AS` == TRUE,]
+
+tab_lfc_filt <- tab_lfc[tab_lfc$Taxon %in% cadiff$Taxon,]
+colnames(tab_lfc_filt) <- c("Taxon", "Intercept LFC", "PHA film + G1 + AS LFC")
+
+tab_se_filt <- tab_se[tab_se$Taxon %in% cadiff$Taxon,]
+colnames(tab_se_filt) <- c("Taxon", "Intercept SE", "PHA film + G1 + AS SE")
+
+tab_w_filt <- tab_w[tab_w$Taxon %in% cadiff$Taxon,]
+colnames(tab_w_filt) <- c("Taxon", "Intercept W", "PHA film + G1 + AS W")
+
+tab_p_filt <- tab_p[tab_p$Taxon %in% cadiff$Taxon,]
+colnames(tab_p_filt) <- c("Taxon", "Intercept P", "PHA film + G1 + AS P")
+
+tab_q_filt <- tab_q[tab_q$Taxon %in% cadiff$Taxon,]
+colnames(tab_q_filt) <- c("Taxon", "Intercept Q", "PHA film + G1 + AS Q")
+
+tab_diff_filt <- tab_diff[tab_diff$Taxon %in% cadiff$Taxon,]
+colnames(tab_diff_filt) <- c("Taxon", "Intercept diff", "PHA film + G1 + AS diff")
+
+#put all data frames into list
+df_list <- list(tab_lfc_filt, tab_se_filt, tab_w_filt, tab_p_filt, tab_q_filt, tab_diff_filt)
+
+#merge all data frames in list
+res_filt <- df_list %>% reduce(full_join, by='Taxon')
+
+# save list
+writexl::write_xlsx(res_filt, "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast/ANCOMBC/PHAfilm_G1_AS_archaea_ancombc.xlsx")
+

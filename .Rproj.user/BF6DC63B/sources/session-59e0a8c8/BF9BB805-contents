@@ -1,0 +1,447 @@
+# =============================================================================
+# ANCOM-BC2 Differential Abundance + NMDS Ordination + PERMANOVA
+# Colleen Ahern | Last updated: 05/13/2026
+#
+# Four comparisons:
+#   1. Bacteria:  CA film + S3 + AS  vs.  CA film + AS
+#   2. Bacteria:  PHA film + G1 + AS vs.  PHA film + AS
+#   3. Archaea:   CA film + S3 + AS  vs.  CA film + AS  (+ PHA film + AS pooled as control)
+#   4. Archaea:   PHA film + G1 + AS vs.  PHA film + AS (+ CA film + AS pooled as control)
+# =============================================================================
+
+# ── Libraries ─────────────────────────────────────────────────────────────────
+library(ANCOMBC)
+library(phyloseq)
+library(qiime2R)
+library(tidyverse)
+library(pheatmap)
+library(grid)
+library(ggplotify)
+library(ggforce)
+library(ggpubr)
+library(cowplot)
+library(vegan)
+library(gtable)
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+BASE    <- "/Users/colleenahern/Documents/Magda_BPs_experiment/ampliseq_fungiplast"
+OUT_DIR <- file.path(BASE, "ANCOMBC2")
+FIG_DIR <- "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures"
+DATE    <- "05132026"
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+
+# ── Run ancombc2 ──────────────────────────────────────────────────────────────
+run_ancombc2 <- function(ps, formula, group = NULL, alpha = 0.05) {
+  ancombc2(
+    data          = ps,
+    tax_level     = "Genus",
+    fix_formula   = formula,
+    rand_formula  = NULL,
+    p_adj_method  = "holm",
+    pseudo_sens   = TRUE,
+    prv_cut       = 0.10,
+    lib_cut       = 1000,
+    s0_perc       = 0.05,
+    group         = group,
+    struc_zero    = !is.null(group),
+    neg_lb        = !is.null(group),
+    alpha         = alpha,
+    n_cl          = 1,
+    verbose       = TRUE,
+    global        = TRUE,
+    pairwise      = TRUE,
+    dunnet        = TRUE,
+    trend         = FALSE,
+    iter_control  = list(tol = 1e-5, max_iter = 100, verbose = FALSE),
+    em_control    = list(tol = 1e-5, max_iter = 100),
+    lme_control   = lme4::lmerControl(),
+    mdfdr_control = list(fwer_ctrl_method = "holm", B = 100)
+  )
+}
+
+# ── Label samples as "A" (control) or "B" (treatment) ────────────────────────
+add_newgroup <- function(ps, treatment_level) {
+  ps@sam_data$Newgroup <- ifelse(
+    ps@sam_data$Testcond == treatment_level, "B", "A"
+  )
+  ps
+}
+
+# ── Extract significant rows and tidy column names ────────────────────────────
+#   coef_col = exact column name, e.g. "TestcondCA film + S3 + AS" or "NewgroupB"
+#   label    = short label for renaming, e.g. "CAS3AS_v_CAAS"
+extract_sig <- function(res, coef_col, label, q_thresh = 0.05) {
+  q_col   <- paste0("q_",           coef_col)
+  rob_col <- paste0("diff_robust_", coef_col)
+  
+  sig      <- res[res[[q_col]]   <  q_thresh, ]
+  keep_cols <- c("taxon", grep(coef_col, names(res), value = TRUE, fixed = TRUE))
+  sig_filt  <- sig[, keep_cols]
+  names(sig_filt) <- gsub(coef_col, label, names(sig_filt), fixed = TRUE)
+  
+  list(sig = sig_filt)
+}
+
+# ── Load phyloseq, rename metadata, subset to film, strip " film" ─────────────
+load_film_ps <- function(features, tree, taxonomy, metadata) {
+  ps <- qza_to_phyloseq(
+    features = file.path(BASE, features),
+    tree     = file.path(BASE, tree),
+    taxonomy = file.path(BASE, taxonomy),
+    metadata = file.path(BASE, metadata)
+  )
+  names(ps@sam_data) <- c("Target", "Experiment", "Test", "TestCond", "AF",
+                          "Timepoint", "Time", "Replicate", "Group", "Condition")
+  ps_film <- subset_samples(ps, Experiment == "BP_Film")
+  ps_film@sam_data$Condition <- gsub(" film", "", ps_film@sam_data$Condition)
+  ps_film
+}
+
+# ── Run NMDS and return plot ───────────────────────────────────────────────────
+nmds_theme <- theme_classic() +
+  theme(
+    text         = element_text(size = 12),
+    plot.title   = element_text(size = 14, hjust = 0.5, face = "bold"),
+    axis.title   = element_text(size = 12),
+    axis.text    = element_text(size = 12),
+    legend.title = element_text(size = 12, face = "bold", vjust = -2),
+    legend.text  = element_text(size = 12)
+  )
+
+run_nmds <- function(ps_film, title) {
+  ps_prop <- transform_sample_counts(ps_film, function(otu) otu / sum(otu))
+  ord     <- ordinate(ps_prop, method = "NMDS", distance = "bray")
+  plot_ordination(ps_prop, ord, color = "Condition", shape = "Time", title = title) +
+    geom_point(size = 3) +
+    nmds_theme
+}
+
+# ── Run PERMANOVA + betadisper ─────────────────────────────────────────────────
+run_permanova <- function(ps_sub, group_var) {
+  otu_mat <- as(otu_table(ps_sub), "matrix")
+  if (taxa_are_rows(ps_sub)) otu_mat <- t(otu_mat)
+  meta     <- data.frame(sample_data(ps_sub))
+  dist_mat <- vegdist(otu_mat, method = "bray")
+  list(
+    adonis     = adonis2(dist_mat ~ meta[[group_var]]),
+    betadisper = anova(betadisper(dist_mat, meta[[group_var]]))
+  )
+}
+
+# =============================================================================
+# 1.  Load phyloseq objects
+# =============================================================================
+
+ps_bac <- qza_to_phyloseq(
+  features = file.path(BASE, "caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza"),
+  tree     = file.path(BASE, "caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza"),
+  taxonomy = file.path(BASE, "output_bac2/qiime2/input/taxonomy.qza"),
+  metadata = file.path(BASE, "metadata/metadata_b_12122024.txt")
+) # Rarefied counts - used initially but don't use for final analysis
+
+ps_bac_df <- psmelt(ps_bac)
+ps_bac_df <- ps_bac_df[ps_bac_df$Experiment == "BP_Film",]
+write_tsv(ps_bac_df,
+          file.path(OUT_DIR, paste0("ps_bac_df_", DATE, ".tsv")))
+
+ps_arc <- qza_to_phyloseq(
+  features = file.path(BASE, "caqiime2b/arc2analysis/16S-table-nocmb-rarefied-3000_filtered.qza"),
+  tree     = file.path(BASE, "caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza"),
+  taxonomy = file.path(BASE, "output_arc2/qiime2/input/taxonomy.qza"),
+  metadata = file.path(BASE, "metadata/metadata_a_12122024.txt")
+) # Rarefied counts - used initially but don't use for final analysis
+
+ps_arc_df <- psmelt(ps_arc)
+ps_arc_df <- ps_arc_df[ps_arc_df$Experiment == "BP_Film",]
+write_tsv(ps_arc_df,
+          file.path(OUT_DIR, paste0("ps_arc_df_", DATE, ".tsv")))
+
+# =============================================================================
+# 2.  Bacteria — CA film + S3 + AS vs. CA film + AS
+# =============================================================================
+set.seed(123)
+
+ps_bac_cas3 <- subset_samples(
+  ps_bac,
+  Testcond %in% c("CA film + S3 + AS", "CA film + AS")
+)
+
+out_bac_cas3 <- run_ancombc2(ps_bac_cas3, formula = "Testcond", group = "Testcond")
+res_bac_cas3 <- out_bac_cas3$res
+
+bac_cas3 <- extract_sig(res_bac_cas3,
+                        coef_col = "TestcondCA film + S3 + AS",
+                        label    = "CAS3AS_v_CAAS")
+
+write_tsv(res_bac_cas3,
+          file.path(OUT_DIR, paste0("CAS3AS_CAAS_ancombc2res_", DATE, ".tsv")))
+
+# =============================================================================
+# 3.  Bacteria — PHA film + G1 + AS vs. PHA film + AS
+# =============================================================================
+set.seed(123)
+
+ps_bac_phag1 <- subset_samples(
+  ps_bac,
+  Testcond %in% c("PHA film + G1 + AS", "PHA film + AS")
+)
+
+out_bac_phag1 <- run_ancombc2(ps_bac_phag1, formula = "Testcond", group = "Testcond")
+res_bac_phag1 <- out_bac_phag1$res
+
+bac_phag1 <- extract_sig(res_bac_phag1,
+                         coef_col = "TestcondPHA film + G1 + AS",
+                         label    = "PHAG1AS_v_PHAAS")
+
+write_tsv(res_bac_phag1,
+          file.path(OUT_DIR, paste0("PHAG1AS_PHAAS_ancombc2res_", DATE, ".tsv")))
+
+# =============================================================================
+# 4.  Archaea — CA film + S3 + AS vs. CA film + AS
+#     (CA film + AS and PHA film + AS pooled as control group "A")
+# =============================================================================
+set.seed(123)
+
+ps_arc_cas3 <- subset_samples(
+  ps_arc,
+  Testcond %in% c("CA film + S3 + AS", "CA film + AS", "PHA film + AS")
+) |>
+  add_newgroup(treatment_level = "CA film + S3 + AS")
+
+out_arc_cas3 <- run_ancombc2(ps_arc_cas3, formula = "Newgroup", group = "Newgroup")
+res_arc_cas3 <- out_arc_cas3$res
+
+arc_cas3 <- extract_sig(res_arc_cas3,
+                        coef_col = "NewgroupB",
+                        label    = "CAS3AS_v_CAAS")
+
+write_tsv(res_arc_cas3,
+          file.path(OUT_DIR, paste0("CAS3AS_CAPHAAS_ARCHAEA_ancombc2res_", DATE, ".tsv")))
+
+# =============================================================================
+# 5.  Archaea — PHA film + G1 + AS vs. PHA film + AS
+#     (PHA film + AS and CA film + AS pooled as control group "A")
+#     NOTE: produces warnings due to low sample size — treat results cautiously
+# =============================================================================
+set.seed(123)
+
+ps_arc_phag1 <- subset_samples(
+  ps_arc,
+  Testcond %in% c("PHA film + G1 + AS", "PHA film + AS", "CA film + AS")
+) |>
+  add_newgroup(treatment_level = "PHA film + G1 + AS")
+
+out_arc_phag1 <- run_ancombc2(ps_arc_phag1, formula = "Newgroup", group = "Newgroup")
+res_arc_phag1 <- out_arc_phag1$res
+
+arc_phag1 <- extract_sig(res_arc_phag1,
+                         coef_col = "NewgroupB",
+                         label    = "PHAG1AS_v_PHAAS")
+
+write_tsv(res_arc_phag1,
+          file.path(OUT_DIR, paste0("PHAG1AS_PHACAAS_ARCHAEA_ancombc2res_", DATE, ".tsv")))
+
+# =============================================================================
+# 6.  Combine significant results across all four comparisons
+# =============================================================================
+
+cas3_all  <- rbind(bac_cas3$sig, arc_cas3$sig)
+phag1_all <- rbind(bac_phag1$sig, arc_phag1$sig)
+
+df_fig <- merge(cas3_all, phag1_all, by = "taxon", all = TRUE) %>%
+  mutate(
+    diff_CAS3AS_v_CAAS          = replace_na(diff_CAS3AS_v_CAAS,          FALSE),
+    diff_robust_CAS3AS_v_CAAS   = replace_na(diff_robust_CAS3AS_v_CAAS,   FALSE),
+    diff_PHAG1AS_v_PHAAS        = replace_na(diff_PHAG1AS_v_PHAAS,        FALSE),
+    diff_robust_PHAG1AS_v_PHAAS = replace_na(diff_robust_PHAG1AS_v_PHAAS, FALSE)
+  ) %>%
+  filter(taxon != "Unknown")
+
+# Domain annotation
+archaea_genera <- c("Methanosarcina", "Methanomassiliicoccus")
+df_fig$Domain <- ifelse(df_fig$taxon %in% archaea_genera, "Archaea", "Bacteria")
+
+write_tsv(df_fig,
+          file.path(OUT_DIR, paste0("ancombc2_df_fig_", DATE, ".tsv")))
+
+# =============================================================================
+# 7.  Heatmap
+# =============================================================================
+
+# ── Matrix: LFC if significant, else 0 ───────────────────────────────────────
+df_mat <- df_fig %>%
+  mutate(
+    `CA + S3 + AS\nvs. CA + AS`   = ifelse(diff_CAS3AS_v_CAAS,   round(lfc_CAS3AS_v_CAAS,   2), 0),
+    `PHA + G1 + AS\nvs. PHA + AS` = ifelse(diff_PHAG1AS_v_PHAAS, round(lfc_PHAG1AS_v_PHAAS, 2), 0)
+  ) %>%
+  column_to_rownames("taxon") %>%
+  select(`CA + S3 + AS\nvs. CA + AS`, `PHA + G1 + AS\nvs. PHA + AS`)
+
+# ── Row annotation ────────────────────────────────────────────────────────────
+annotation_row <- df_fig %>%
+  select(taxon, Domain) %>%
+  column_to_rownames("taxon")
+
+ann_colors <- list(Domain = c(Bacteria = "#7570B3", Archaea = "#E7298A"))
+
+# ── Colour scale ──────────────────────────────────────────────────────────────
+lfc_max    <- ceiling(max(abs(df_mat), na.rm = TRUE))
+my_palette <- colorRampPalette(c("blue", "black", "red"))(299)
+my_breaks  <- seq(-lfc_max, lfc_max, length.out = 300)
+
+# ── Column label override (needed for \n line breaks in pheatmap) ─────────────
+draw_colnames_45 <- function(coln, gaps, ...) {
+  coord <- pheatmap:::find_coordinates(length(coln), gaps)
+  x     <- coord$coord - 0.5 * coord$size
+  textGrob(coln, x = x, y = unit(1, "npc") - unit(3, "bigpts"),
+           vjust = 1, hjust = 0.5, rot = 0, gp = gpar(...))
+}
+assignInNamespace("draw_colnames", draw_colnames_45, ns = asNamespace("pheatmap"))
+
+# ── Draw heatmap ──────────────────────────────────────────────────────────────
+ancombcph <- pheatmap(
+  df_mat,
+  color                = my_palette,
+  breaks               = my_breaks,
+  cellheight           = 20,
+  cellwidth            = 150,
+  cluster_cols         = FALSE,
+  cluster_rows         = TRUE,
+  fontsize             = 12,
+  display_numbers      = FALSE,
+  # annotation_row       = annotation_row,
+  annotation_colors    = ann_colors,
+  annotation_names_row = FALSE,
+  border_color         = "grey",
+  angle_col            = 0,
+  legend_breaks        = c(-lfc_max, 0, lfc_max)
+)
+
+# Save standalone heatmap PDF
+pdf(file.path(OUT_DIR, paste0("ancombc2_heatmap_", DATE, ".pdf")),
+    width = 10, height = max(4, nrow(df_mat) * 0.4 + 2))
+print(ancombcph)
+dev.off()
+
+# Convert to ggplot for combining with NMDS
+ancombcphgg <- as_ggplot(ancombcph$gtable)
+ancombcphgg <- ancombcphgg + theme(plot.margin = margin(0, 0, 0, 0)) 
+ancombcphgg
+
+# =============================================================================
+# 8.  NMDS — Archaea
+# =============================================================================
+ps_arc_film <- load_film_ps(
+  features = "caqiime2b/arc2analysis/16S-table-nocmb-rarefied-3000_filtered.qza",
+  tree     = "caqiime2b/arc2analysis/rooted-16S-tree-filteredSVs.qza",
+  taxonomy = "output_arc2/qiime2/input/taxonomy.qza",
+  metadata = "metadata/metadata_a_12122024.txt"
+)
+
+set.seed(123)
+deg_plot_arc <- run_nmds(ps_arc_film, title = "Bray NMDS: Archaea")
+# stress = 0.03128909
+
+# =============================================================================
+# 9.  NMDS — Bacteria 
+# =============================================================================
+ps_bac_film <- load_film_ps(
+  features = "caqiime2b/bac2analysis/16S-table-nocma-rarefied-10000_filtered.qza",
+  tree     = "caqiime2b/bac2analysis/rooted-16S-tree-filteredSVs.qza",
+  taxonomy = "output_bac2/qiime2/input/taxonomy.qza",
+  metadata = "metadata/metadata_b_12122024.txt"
+)
+
+
+
+set.seed(123)
+deg_plot_bac <- run_nmds(ps_bac_film, title = "Bray NMDS: Bacteria")
+# stress = 0.1146306
+
+# =============================================================================
+# 10. Combined figure: NMDS (A + B) and heatmap (C)
+# =============================================================================
+deg_plot_combined <- ggarrange(
+  deg_plot_arc, deg_plot_bac,
+  ncol = 2, nrow = 1,
+  common.legend = TRUE, legend = "right",
+  labels = c("A)", "B)")
+)
+
+nmdsancplot <- plot_grid(
+  deg_plot_combined, ancombcphgg,
+  nrow = 2, ncol = 1,
+  labels       = c("", "C)"),
+  rel_heights  = c(1, 0.7)
+)
+
+nmdsancplot
+
+ggsave(plot = nmdsancplot,
+       filename = file.path(FIG_DIR, paste0("16S_figure_", DATE, ".pdf")),
+       width = 10, height = 7, units = "in", dpi = 300, bg = "white")
+
+ggsave(plot = nmdsancplot,
+       filename = file.path(FIG_DIR, paste0("16S_figure_", DATE, ".tiff")),
+       width = 10, height = 7, units = "in", dpi = 200, bg = "white")
+
+# =============================================================================
+# 11. PERMANOVA
+# =============================================================================
+set.seed(123)
+
+# ── Archaea: CA + S3 + AS vs. CA + AS / PHA + AS ─────────────────────────────
+ps_arc_cas3_perm <- subset_samples(
+  ps_arc_film,
+  Condition %in% c("CA + S3 + AS", "CA + AS", "PHA + AS")
+)
+ps_arc_cas3_perm@sam_data$Subcond <- ifelse(
+  ps_arc_cas3_perm@sam_data$Condition == "CA + S3 + AS", "B", "A"
+)
+perm_arc_cas3 <- run_permanova(ps_arc_cas3_perm, "Subcond")
+print(perm_arc_cas3$adonis)
+print(perm_arc_cas3$betadisper)
+
+# ── Archaea: PHA + G1 + AS vs. CA + AS / PHA + AS ────────────────────────────
+ps_arc_phag1_perm <- subset_samples(
+  ps_arc_film,
+  Condition %in% c("PHA + G1 + AS", "CA + AS", "PHA + AS")
+)
+ps_arc_phag1_perm@sam_data$Subcond <- ifelse(
+  ps_arc_phag1_perm@sam_data$Condition == "PHA + G1 + AS", "B", "A"
+)
+perm_arc_phag1 <- run_permanova(ps_arc_phag1_perm, "Subcond")
+print(perm_arc_phag1$adonis)
+print(perm_arc_phag1$betadisper)
+
+# ── Bacteria: CA + S3 + AS vs. CA + AS ───────────────────────────────────────
+ps_bac_cas3_perm <- subset_samples(
+  ps_bac_film,
+  Condition %in% c("CA + S3 + AS", "CA + AS")
+)
+perm_bac_cas3 <- run_permanova(ps_bac_cas3_perm, "Condition")
+print(perm_bac_cas3$adonis)
+print(perm_bac_cas3$betadisper)
+
+# ── Bacteria: PHA + G1 + AS vs. PHA + AS ─────────────────────────────────────
+ps_bac_phag1_perm <- subset_samples(
+  ps_bac_film,
+  Condition %in% c("PHA + G1 + AS", "PHA + AS")
+)
+perm_bac_phag1 <- run_permanova(ps_bac_phag1_perm, "Condition")
+print(perm_bac_phag1$adonis)
+print(perm_bac_phag1$betadisper)
+
+# =============================================================================
+# PERMANOVA results summary
+# -----------------------------------------------------------------------------
+# Archaea  CA + S3 + AS vs CA + AS / PHA + AS:  Pr(>F) = 0.012, R2 = 0.284, F = 3.575, dispersion p = 0.025
+# Archaea  PHA + G1 + AS vs CA + AS / PHA + AS: Pr(>F) = 0.009, R2 = 0.473, F = 7.186, dispersion p = 0.406
+# Bacteria CA + S3 + AS vs CA + AS:             Pr(>F) = 0.001, R2 = 0.272, F = 4.480, dispersion p = 0.019
+# Bacteria PHA + G1 + AS vs PHA + AS:           Pr(>F) = 0.005, R2 = 0.263, F = 3.573, dispersion p = 0.466
+# =============================================================================
+
+message("Done. Outputs written to: ", OUT_DIR)

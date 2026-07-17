@@ -1,0 +1,458 @@
+# Colleen Ahern
+# 02/24/2026
+# Supplemental biogas figures
+
+library(ggplot2)
+library(readr)
+
+datasup <- read_csv("/Users/colleenahern/Documents/Magda_BPs_experiment/biogas_data/BP_expI_gas_organized_forR_supp_02232026.csv")
+
+# T-tests to determine statistical significance of all comparisons - 04/07/2026
+# G1-PHA pairing
+datasup_sub <- datasup[14,grepl("PHA \\+ AS|PHA \\+ G1 \\+ AS|tPHA \\+ G1 \\+ AS", colnames(datasup))]
+datasup_sub <- cbind(datasup[14, c(37:39,2:4)], datasup_sub) # G1 + AS and AS
+datasup_sub <- datasup[14,grepl("CA \\+ AS|CA \\+ S3 \\+ AS|tCA \\+ S3 \\+ AS", colnames(datasup))]
+datasup_sub <- cbind(datasup[14, c(32:34,2:4)], datasup_sub) # S3 + AS and AS
+datasup_sub <- datasup[14,grepl("PLA \\+ AS|PLA \\+ S3 \\+ AS|tPLA \\+ S3 \\+ AS", colnames(datasup))]
+datasup_sub <- cbind(datasup[14, c(32:34,2:4)], datasup_sub) # S3 + AS and AS
+datasup_sub <- t(datasup_sub)
+
+# keep <- c("PHA + G1 + AS 1", "PHA + G1 + AS 2", "PHA + G1 + AS 3", "G1 + AS 1", "G1 + AS 2", "G1 + AS 3")
+# keep <- c("PHA + G1 + AS 1", "PHA + G1 + AS 2", "PHA + G1 + AS 3", "AS 1", "AS 2", "AS 3")
+# keep <- c("PHA + G1 + AS 1", "PHA + G1 + AS 2", "PHA + G1 + AS 3", "PHA + AS 1", "PHA + AS 2")
+# keep <- c("CA + S3 + AS 1", "CA + S3 + AS 2", "CA + S3 + AS 3", "S3 + AS 1", "S3 + AS 2", "S3 + AS 3")
+# keep <- c("CA + S3 + AS 1", "CA + S3 + AS 2", "CA + S3 + AS 3", "AS 1", "AS 2", "AS 3")
+# keep <- c("CA + S3 + AS 1", "CA + S3 + AS 2", "CA + S3 + AS 3", "CA + AS 1", "CA + AS 2")
+# keep <- c("PLA + S3 + AS 1", "PLA + S3 + AS 2", "PLA + S3 + AS 3", "S3 + AS 1", "S3 + AS 2", "S3 + AS 3")
+# keep <- c("PLA + S3 + AS 1", "PLA + S3 + AS 2", "PLA + S3 + AS 3", "AS 1", "AS 2", "AS 3")
+keep <- c("PLA + S3 + AS 1", "PLA + S3 + AS 2", "PLA + S3 + AS 3", "PLA + AS 1", "PLA + AS 2", "PLA + AS 3")
+
+datasup_subsub <- as.data.frame(datasup_sub[rownames(datasup_sub) %in% keep,])
+datasup_subsub$group <- c(rep("A",3), rep("B",3))
+# datasup_subsub$group <- c(rep("A",2), rep("B",3))
+colnames(datasup_subsub) <- c("value", "group")
+
+t.test(value ~ group, data = datasup_subsub)
+
+# T-test results:
+# PHA + G1 + AS not statistically significantly more than G1 + AS
+# PHA + G1 + AS is statistically significantly more than AS
+# PHA + G1 + AS not statistically significantly more than PHA + AS
+# CA + S3 + AS not statistically significantly more than S3 + AS
+# CA + S3 + AS is statistically significantly more than AS
+# CA + S3 + AS is statistically significantly more than CA + AS
+# PLA + S3 + AS not statistically significantly more than S3 + AS
+# PLA + S3 + AS is statistically significantly more than AS
+# PLA + S3 + AS is statistically significantly more than PLA + AS
+
+
+
+
+
+# Making growth curves
+palette.colors(palette = "Okabe-Ito")
+
+cols <- c("AS"="#0072B2","PLA + AS"="#E69F00","S3 + AS"="#009E73", "PLA + S3 + AS"="#D55E00","tPLA + S3 + AS"="#CC79A7")
+p1sup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averagePLAAS, group = 1, color = "PLA + AS")) + 
+  geom_point(aes(y = averagePLAAS, color = "PLA + AS")) + 
+  geom_errorbar(aes(ymax = averagePLAAS + sdPLAAS, 
+                    ymin = averagePLAAS - sdPLAAS, color = "PLA + AS")) +
+  geom_line(aes(y = averageS3AS, group = 1, color = "S3 + AS")) + 
+  geom_point(aes(y = averageS3AS, color = "S3 + AS")) + 
+  geom_errorbar(aes(ymax = averageS3AS + sdS3AS, 
+                    ymin = averageS3AS - sdS3AS, color = "S3 + AS")) +
+  geom_line(aes(y = averagePLAS3AS, group = 1, color = "PLA + S3 + AS")) + 
+  geom_point(aes(y = averagePLAS3AS, color = "PLA + S3 + AS")) + 
+  geom_errorbar(aes(ymax = averagePLAS3AS + sdPLAS3AS, 
+                    ymin = averagePLAS3AS - sdPLAS3AS, color = "PLA + S3 + AS")) +
+  geom_line(aes(y = averagetPLAS3AS, group = 1, color = "tPLA + S3 + AS")) + 
+  geom_point(aes(y = averagetPLAS3AS, color = "tPLA + S3 + AS")) +
+  geom_errorbar(aes(ymax = averagetPLAS3AS + sdtPLAS3AS, 
+                    ymin = averagetPLAS3AS - sdtPLAS3AS, color = "tPLA + S3 + AS")) +
+  labs(
+    title = "S3-PLA pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols) +
+  theme( axis.text = element_text(size = 12),
+         axis.title = element_text(size = 12),
+         plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+         legend.text = element_text(size=12),
+         legend.title = element_text(size=12, face = "bold", vjust = -2))
+
+p1sup
+
+cols <- c("AS"="#0072B2","PLA + AS"="#E69F00","G1 + AS"="#009E73", "PLA + G1 + AS"="#D55E00","tPLA + G1 + AS"="#CC79A7")
+p1gsup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averagePLAAS, group = 1, color = "PLA + AS")) + 
+  geom_point(aes(y = averagePLAAS, color = "PLA + AS")) + 
+  geom_errorbar(aes(ymax = averagePLAAS + sdPLAAS, 
+                    ymin = averagePLAAS - sdPLAAS, color = "PLA + AS")) +
+  geom_line(aes(y = averageG1AS, group = 1, color = "G1 + AS")) + 
+  geom_point(aes(y = averageG1AS, color = "G1 + AS")) + 
+  geom_errorbar(aes(ymax = averageG1AS + sdG1AS, 
+                    ymin = averageG1AS - sdG1AS, color = "G1 + AS")) +
+  geom_line(aes(y = averagePLAG1AS, group = 1, color = "PLA + G1 + AS")) + 
+  geom_point(aes(y = averagePLAG1AS, color = "PLA + G1 + AS")) + 
+  geom_errorbar(aes(ymax = averagePLAG1AS + sdPLAG1AS, 
+                    ymin = averagePLAG1AS - sdPLAG1AS, color = "PLA + G1 + AS")) +
+  geom_line(aes(y = averagetPLAG1AS, group = 1, color = "tPLA + G1 + AS")) + 
+  geom_point(aes(y = averagetPLAG1AS, color = "tPLA + G1 + AS")) +
+  geom_errorbar(aes(ymax = averagetPLAG1AS + sdtPLAG1AS, 
+                    ymin = averagetPLAG1AS - sdtPLAG1AS, color = "tPLA + G1 + AS")) +
+  labs(
+    title = "G1-PLA pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols) +
+  theme( axis.text = element_text(size = 12),
+         axis.title = element_text(size = 12),
+         plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+         legend.text = element_text(size=12),
+         legend.title = element_text(size=12, face = "bold", vjust = -2))
+
+p1gsup
+
+cols <- c("AS"="#0072B2","PHA + AS"="#E69F00", "PHA + G1 + AS"="#D55E00","tPHA + G1 + AS"="#CC79A7", "G1 + AS"="#009E73")
+q1sup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averagePHAAS, group = 1, color = "PHA + AS")) + 
+  geom_point(aes(y = averagePHAAS, color = "PHA + AS")) + 
+  geom_errorbar(aes(ymax = averagePHAAS + sdPHAAS, 
+                    ymin = averagePHAAS - sdPHAAS, color = "PHA + AS")) +
+  geom_line(aes(y = averagePHAG1AS, group = 1, color = "PHA + G1 + AS")) + 
+  geom_point(aes(y = averagePHAG1AS, color = "PHA + G1 + AS")) + 
+  geom_errorbar(aes(ymax = averagePHAG1AS + sdPHAG1AS, 
+                    ymin = averagePHAG1AS - sdPHAG1AS, color = "PHA + G1 + AS")) +
+  geom_line(aes(y = averagetPHAG1AS, group = 1, color = "tPHA + G1 + AS")) + 
+  geom_point(aes(y = averagetPHAG1AS, color = "tPHA + G1 + AS")) +
+  geom_errorbar(aes(ymax = averagetPHAG1AS + sdtPHAG1AS, 
+                    ymin = averagetPHAG1AS - sdtPHAG1AS, color = "tPHA + G1 + AS")) +
+  geom_line(aes(y = averageG1AS, group = 1, color = "G1 + AS")) + 
+  geom_point(aes(y = averageG1AS, color = "G1 + AS")) + 
+  geom_errorbar(aes(ymax = averageG1AS + sdG1AS, 
+                    ymin = averageG1AS - sdG1AS, color = "G1 + AS")) +
+  labs(
+    title = "G1-PHA pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols, breaks = c("AS", "PHA + AS", "PHA + G1 + AS", "G1 + AS", "tPHA + AS", "tPHA + G1 + AS")) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2))
+
+q1sup
+
+cols <- c("AS"="#0072B2","PHA + AS"="#E69F00", "PHA + S3 + AS"="#D55E00","tPHA + S3 + AS"="#CC79A7", "S3 + AS"="#009E73")
+q1ssup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averagePHAAS, group = 1, color = "PHA + AS")) + 
+  geom_point(aes(y = averagePHAAS, color = "PHA + AS")) + 
+  geom_errorbar(aes(ymax = averagePHAAS + sdPHAAS, 
+                    ymin = averagePHAAS - sdPHAAS, color = "PHA + AS")) +
+  geom_line(aes(y = averagePHAS3AS, group = 1, color = "PHA + S3 + AS")) + 
+  geom_point(aes(y = averagePHAS3AS, color = "PHA + S3 + AS")) + 
+  geom_errorbar(aes(ymax = averagePHAS3AS + sdPHAS3AS, 
+                    ymin = averagePHAS3AS - sdPHAS3AS, color = "PHA + S3 + AS")) +
+  geom_line(aes(y = averagetPHAS3AS, group = 1, color = "tPHA + S3 + AS")) + 
+  geom_point(aes(y = averagetPHAS3AS, color = "tPHA + S3 + AS")) +
+  geom_errorbar(aes(ymax = averagetPHAS3AS + sdtPHAS3AS, 
+                    ymin = averagetPHAS3AS - sdtPHAS3AS, color = "tPHA + S3 + AS")) +
+  geom_line(aes(y = averageS3AS, group = 1, color = "S3 + AS")) + 
+  geom_point(aes(y = averageS3AS, color = "S3 + AS")) + 
+  geom_errorbar(aes(ymax = averageS3AS + sdS3AS, 
+                    ymin = averageS3AS - sdS3AS, color = "S3 + AS")) +
+  labs(
+    title = "S3-PHA pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols, breaks = c("AS", "PHA + AS", "PHA + S3 + AS", "S3 + AS", "tPHA + AS", "tPHA + S3 + AS")) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2))
+
+q1ssup
+
+cols <- c("AS"="#0072B2","CA + AS"="#E69F00","S3 + AS"="#009E73", "CA + S3 + AS"="#D55E00","tCA + S3 + AS"="#CC79A7")
+r1sup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averageCAAS, group = 1, color = "CA + AS")) + 
+  geom_point(aes(y = averageCAAS, color = "CA + AS")) + 
+  geom_errorbar(aes(ymax = averageCAAS + sdCAAS, 
+                    ymin = averageCAAS - sdCAAS, color = "CA + AS")) +
+  geom_line(aes(y = averageS3AS, group = 1, color = "S3 + AS")) + 
+  geom_point(aes(y = averageS3AS, color = "S3 + AS")) + 
+  geom_errorbar(aes(ymax = averageS3AS + sdS3AS, 
+                    ymin = averageS3AS - sdS3AS, color = "S3 + AS")) +
+  geom_line(aes(y = averageCAS3AS, group = 1, color = "CA + S3 + AS")) + 
+  geom_point(aes(y = averageCAS3AS, color = "CA + S3 + AS")) + 
+  geom_errorbar(aes(ymax = averageCAS3AS + sdCAS3AS, 
+                    ymin = averageCAS3AS - sdCAS3AS, color = "CA + S3 + AS")) +
+  geom_line(aes(y = averagetCAS3AS, group = 1, color = "tCA + S3 + AS")) + 
+  geom_point(aes(y = averagetCAS3AS, color = "tCA + S3 + AS")) +
+  geom_errorbar(aes(ymax = averagetCAS3AS + sdtCAS3AS, 
+                    ymin = averagetCAS3AS - sdtCAS3AS, color = "tCA + S3 + AS")) +
+  labs(
+    title = "S3-CA pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2))
+r1sup
+
+cols <- c("AS"="#0072B2","CA + AS"="#E69F00","G1 + AS"="#009E73", "CA + G1 + AS"="#D55E00","tCA + G1 + AS"="#CC79A7")
+r1gsup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averageCAAS, group = 1, color = "CA + AS")) + 
+  geom_point(aes(y = averageCAAS, color = "CA + AS")) + 
+  geom_errorbar(aes(ymax = averageCAAS + sdCAAS, 
+                    ymin = averageCAAS - sdCAAS, color = "CA + AS")) +
+  geom_line(aes(y = averageG1AS, group = 1, color = "G1 + AS")) + 
+  geom_point(aes(y = averageG1AS, color = "G1 + AS")) + 
+  geom_errorbar(aes(ymax = averageG1AS + sdG1AS, 
+                    ymin = averageG1AS - sdG1AS, color = "G1 + AS")) +
+  geom_line(aes(y = averageCAG1AS, group = 1, color = "CA + G1 + AS")) + 
+  geom_point(aes(y = averageCAG1AS, color = "CA + G1 + AS")) + 
+  geom_errorbar(aes(ymax = averageCAG1AS + sdCAG1AS, 
+                    ymin = averageCAG1AS - sdCAG1AS, color = "CA + G1 + AS")) +
+  geom_line(aes(y = averagetCAG1AS, group = 1, color = "tCA + G1 + AS")) + 
+  geom_point(aes(y = averagetCAG1AS, color = "tCA + G1 + AS")) +
+  geom_errorbar(aes(ymax = averagetCAG1AS + sdtCAG1AS, 
+                    ymin = averagetCAG1AS - sdtCAG1AS, color = "tCA + G1 + AS")) +
+  labs(
+    title = "G1-CA pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2))
+r1gsup
+
+cols <- c("AS"="#0072B2","PLA700 + AS"="#E69F00","S3 + AS"="#009E73", "PLA700 + S3 + AS"="#D55E00","tPLA700 + S3 + AS"="#CC79A7")
+s1sup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averagePLA700AS, group = 1, color = "PLA700 + AS")) + 
+  geom_point(aes(y = averagePLA700AS, color = "PLA700 + AS")) + 
+  geom_errorbar(aes(ymax = averagePLA700AS + sdPLA700AS, 
+                    ymin = averagePLA700AS - sdPLA700AS, color = "PLA700 + AS")) +
+  geom_line(aes(y = averageS3AS, group = 1, color = "S3 + AS")) + 
+  geom_point(aes(y = averageS3AS, color = "S3 + AS")) + 
+  geom_errorbar(aes(ymax = averageS3AS + sdS3AS, 
+                    ymin = averageS3AS - sdS3AS, color = "S3 + AS")) +
+  geom_line(aes(y = averagePLA700S3AS, group = 1, color = "PLA700 + S3 + AS")) + 
+  geom_point(aes(y = averagePLA700S3AS, color = "PLA700 + S3 + AS")) + 
+  geom_errorbar(aes(ymax = averagePLA700S3AS + sdPLA700S3AS, 
+                    ymin = averagePLA700S3AS - sdPLA700S3AS, color = "PLA700 + S3 + AS")) +
+  geom_line(aes(y = averagetPLA700S3AS, group = 1, color = "tPLA700 + S3 + AS")) + 
+  geom_point(aes(y = averagetPLA700S3AS, color = "tPLA700 + S3 + AS")) +
+  geom_errorbar(aes(ymax = averagetPLA700S3AS + sdtPLA700S3AS, 
+                    ymin = averagetPLA700S3AS - sdtPLA700S3AS, color = "tPLA700 + S3 + AS")) +
+  labs(
+    title = "S3-PLA700 pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2))
+s1sup
+
+cols <- c("AS"="#0072B2","PLA700 + AS"="#E69F00","G1 + AS"="#009E73", "PLA700 + G1 + AS"="#D55E00","tPLA700 + G1 + AS"="#CC79A7")
+s1gsup <- ggplot(datasup, aes(x = Day)) + geom_line(aes(y = averageAS, group = 1, color = "AS")) + 
+  geom_point(aes(y = averageAS, color = "AS")) +
+  geom_errorbar(aes(ymax = averageAS + sdAS, 
+                    ymin = averageAS - sdAS, color = "AS")) +
+  geom_line(aes(y = averagePLA700AS, group = 1, color = "PLA700 + AS")) + 
+  geom_point(aes(y = averagePLA700AS, color = "PLA700 + AS")) + 
+  geom_errorbar(aes(ymax = averagePLA700AS + sdPLA700AS, 
+                    ymin = averagePLA700AS - sdPLA700AS, color = "PLA700 + AS")) +
+  geom_line(aes(y = averageG1AS, group = 1, color = "G1 + AS")) + 
+  geom_point(aes(y = averageG1AS, color = "G1 + AS")) + 
+  geom_errorbar(aes(ymax = averageG1AS + sdG1AS, 
+                    ymin = averageG1AS - sdG1AS, color = "G1 + AS")) +
+  geom_line(aes(y = averagePLA700G1AS, group = 1, color = "PLA700 + G1 + AS")) + 
+  geom_point(aes(y = averagePLA700G1AS, color = "PLA700 + G1 + AS")) + 
+  geom_errorbar(aes(ymax = averagePLA700G1AS + sdPLA700G1AS, 
+                    ymin = averagePLA700G1AS - sdPLA700G1AS, color = "PLA700 + G1 + AS")) +
+  geom_line(aes(y = averagetPLA700G1AS, group = 1, color = "tPLA700 + G1 + AS")) + 
+  geom_point(aes(y = averagetPLA700G1AS, color = "tPLA700 + G1 + AS")) +
+  geom_errorbar(aes(ymax = averagetPLA700G1AS + sdtPLA700G1AS, 
+                    ymin = averagetPLA700G1AS - sdtPLA700G1AS, color = "tPLA700 + G1 + AS")) +
+  labs(
+    title = "G1-PLA700 pairing",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (mL)") +
+  ylim(0, 250) +
+  scale_x_continuous(breaks = c(4,32,60), expand = c(0, 0)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2))
+s1gsup
+
+# library(patchwork)
+# p1sup  + r1 + q1sup + plot_layout(ncol = 2)
+
+library(cowplot)
+tp1sup <- plot_grid(p1sup, p1gsup, r1sup, r1gsup, q1ssup, q1sup, s1sup, s1gsup, nrow = 4, ncol = 2, labels = c("A)", "B)", "C)", "D)", "E)", "F)", "G)", "H)"))
+tp1sup
+
+ggsave(plot = tp1sup, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/Biogas_suppfig_02242026.pdf", width = 10, height = 10, units = "in", dpi = 300)
+ggsave(plot = tp1sup, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/Biogas_suppfig_02242026.tiff", width = 10, height = 10, units = "in", dpi = 200, bg="white")
+
+
+##########################################################################################################################
+# S3 CA monoculture
+s3ca <- read_csv("/Users/colleenahern/Documents/Magda_BPs_experiment/biogas_datasup/S3CA_mono_gas_org_01272026.csv")
+colnames(s3ca) <- gsub(" \\+ ", "_", colnames(s3ca))
+colnames(s3ca) <- gsub(" ", "_", colnames(s3ca))
+
+cbf_palette <- c("#785EF0", "#DC267F", "#648FFF")
+cols <- c("S3"="#785EF0","CA + S3"="#DC267F","Blank media"="#648FFF")
+
+v1 <- ggplot(s3ca, aes(x = Day)) + geom_line(aes(y = S3_media_avg_cp, group = 1, color = "S3")) + 
+  geom_point(aes(y = S3_media_avg_cp, color = "S3")) +
+  geom_errorbar(aes(ymax = S3_media_avg_cp + S3_media_std_cp, 
+                    ymin = S3_media_avg_cp - S3_media_std_cp, color = "S3")) +
+  geom_line(aes(y = S3_media_CA_avg_cp, group = 1, color = "CA + S3")) + 
+  geom_point(aes(y = S3_media_CA_avg_cp, color = "CA + S3")) + 
+  geom_errorbar(aes(ymax = S3_media_CA_avg_cp + S3_media_CA_std_cp, 
+                    ymin = S3_media_CA_avg_cp - S3_media_CA_std_cp, color = "CA + S3")) +
+  geom_line(aes(y = media_avg_cp, group = 1, color = "Blank media")) + 
+  geom_point(aes(y = media_avg_cp, color = "Blank media")) + 
+  geom_errorbar(aes(ymax = media_avg_cp + media_std_cp, 
+                    ymin = media_avg_cp - media_std_cp, color = "Blank media")) +
+  labs(
+    #title = "CA",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (psi)") +
+  ylim(0, 10) +
+  scale_x_continuous(breaks = c(0,7,13), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-.7, 10), breaks = seq(0, 10, by = 2)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols, breaks = c("CA + S3", "S3", "Blank media")) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2),
+        plot.margin = margin(23, 0, 5, 5))
+
+v1
+
+# G1 PHA monoculture
+g1pha <- read_csv("/Users/colleenahern/Documents/Magda_BPs_experiment/biogas_datasup/G1PHA_mono_gas_org_01272026.csv")
+colnames(g1pha) <- gsub(" \\+ ", "_", colnames(g1pha))
+colnames(g1pha) <- gsub(" ", "_", colnames(g1pha))
+
+cbf_palette <- c("#785EF0", "#DC267F", "#648FFF")
+cols <- c("G1"="#785EF0","PHA + G1"="#DC267F","Blank media"="#648FFF")
+
+w1 <- ggplot(g1pha, aes(x = Day)) + geom_line(aes(y = G1_media_avg_cp, group = 1, color = "G1")) + 
+  geom_point(aes(y = G1_media_avg_cp, color = "G1")) +
+  geom_errorbar(aes(ymax = G1_media_avg_cp + G1_media_std_cp, 
+                    ymin = G1_media_avg_cp - G1_media_std_cp, color = "G1")) +
+  geom_line(aes(y = G1_PHA_media_avg_cp, group = 1, color = "PHA + G1")) + 
+  geom_point(aes(y = G1_PHA_media_avg_cp, color = "PHA + G1")) + 
+  geom_errorbar(aes(ymax = G1_PHA_media_avg_cp + G1_PHA_media_std_cp, 
+                    ymin = G1_PHA_media_avg_cp - G1_PHA_media_std_cp, color = "PHA + G1")) +
+  geom_line(aes(y = media_avg_cp, group = 1, color = "Blank media")) + 
+  geom_point(aes(y = media_avg_cp, color = "Blank media")) + 
+  geom_errorbar(aes(ymax = media_avg_cp + media_std_cp, 
+                    ymin = media_avg_cp - media_std_cp, color = "Blank media")) +
+  labs(
+    #title = "CA",
+    x = "Day",
+    y = "Cumulative Biogas \nProduction (psi)") +
+  ylim(-.7, 10) +
+  scale_x_continuous(breaks = c(0,4,8)) +
+  scale_y_continuous(limits = c(-.7, 10), breaks = seq(0, 10, by = 2)) +
+  theme_classic() +
+  scale_color_manual(name = "Condition", values = cols, breaks = c("PHA + G1", "G1", "Blank media")) +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 14),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12, face = "bold", vjust = -2),
+        plot.margin = margin(23, 0, 5, 5))
+
+w1
+
+library(ggpubr)
+deg_plot4 <- ggarrange(v1, w1, ncol=1, nrow=2, labels = c("A)", "B)"))
+deg_plot4
+
+
+library(cowplot)
+dp <- plot_grid(deg_plot4, hm1$gtable, nrow = 1, ncol = 2, rel_widths = c(1, 1.5), labels = c("", "C)"))
+dp
+
+ggsave(plot = dp, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/Monoculture_S3CA_deseqheatmap_fig_02052026.pdf", width = 12, height = 11, units = "in", dpi = 300)
+# THIS TIFF IS DPI 200, NEED DPI 300 FOR PUBLICATION
+# I am making this tiff just so I can add it to the shared word doc for Magda. Use the pdf when submitting to the journal
+ggsave(plot = dp, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/Monoculture_S3CA_deseqheatmap_fig_02052026.tiff", width = 12, height = 11, units = "in", dpi = 200, bg="white")
+
+# 02/05/2026 bringing sem fig into here
+library(magick)
+mypic <- image_read("/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/SEM_fig_size12_02052026.png")
+sem1 <- rasterGrob(mypic, interpolate=TRUE)
+sem1 <- as_ggplot(sem1)
+sem1 <- sem1 + theme(plot.margin = margin(5, 5, 5, 5))
+sem1
+
+ggsave(plot = sem1, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/SEM_ggplot_fig_size12_02052026.pdf", width = 10, height = 6, units = "in", dpi = 300)
+ggsave(plot = sem1, filename = "/Users/colleenahern/Documents/Magda_BPs_experiment/Figures/SEM_ggplot_fig_size12_02052026.tiff", width = 10, height = 6, units = "in", dpi = 300, bg="white")
