@@ -10,6 +10,7 @@ library(ape)
 library(ggrepel)
 library(pheatmap)
 library(grid)
+library(Biostrings)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE    <- "/Users/colleenahern/Documents/Magda_BPs_experiment"
@@ -156,6 +157,40 @@ vary_43caz <- vary_43 %>%
 
 write_csv(vary_43caz,
           file.path(RNA_DIR, "DESeq2_analysis/Tables/s3_vary43_s3cavss3_anno_cazanno_05132026.csv"))
+
+# =============================================================================
+# 4b.  Import Wilken and Lawson datasets to compare to my RNAseq data
+# =============================================================================
+
+vary_43caz <- read_csv(file.path(RNA_DIR, "DESeq2_analysis/Tables/s3_vary43_s3cavss3_anno_cazanno_05132026.csv"))
+stelmocell <- read.delim(file.path(RNA_DIR, "dbcan/cazyreport.txt"))
+gh_doc_genes <- stelmocell %>%
+  filter(grepl("GH", description) & grepl("DOC", description)) %>%
+  rename(ProteinID = proteinId) %>%
+  rename_with(~ paste0("Wilken_", .), .cols = -ProteinID)
+
+scaffold_names <- names(readAAStringSet(file.path(BASE, "S3_JGI_files/Neolan1_GeneCatalog_proteins_20200610.aa.fasta")))
+claw_table <- tibble(header = scaffold_names) %>%
+  separate(header, into = c("jgi", "genome", "ProteinID", "orf"), sep = "\\|", extra = "merge") %>%
+  select(ProteinID, orf)
+
+cldata <- read_csv(file.path(RNA_DIR, "DESeq2_analysis/media-3.csv")) %>%
+  filter(genome == "Neolan1") %>%
+  select(-...1)
+
+cltabdat <- merge(claw_table, cldata, by = "orf", all.y = TRUE) %>%
+  rename_with(~ paste0("Lawson_", .), .cols = -ProteinID)
+
+vary_43sigpos <- vary_43caz %>%
+  filter(S3CA_S3_log2FoldChange > 0, S3CA_S3_padj < 0.05)
+
+table(vary_43sigpos$ProteinID %in% cltabdat$ProteinID) # 285 of my N. lanati genes that were significantly upregulated are expressed in the Lawson et al dataset
+table(vary_43sigpos$ProteinID %in% gh_doc_genes$ProteinID) # 108 of my N. lanati genes that were significantly upregulated are were identified as cellulosome-related GHs by Wilken et al
+
+vary_43caz_lit <- merge(vary_43caz, gh_doc_genes, by = "ProteinID", all.x = TRUE)
+vary_43caz_lit <- merge(vary_43caz_lit, cltabdat, by = "ProteinID", all.x = TRUE)
+write_csv(vary_43caz_lit,
+          file.path(RNA_DIR, "DESeq2_analysis/Tables/vary_43caz_lit_07212026.csv"))
 
 # =============================================================================
 # 5.  Volcano plot
